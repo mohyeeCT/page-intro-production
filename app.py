@@ -93,12 +93,30 @@ with st.sidebar:
         value=4,
         help="Number of supporting keywords passed to the AI alongside the primary keyword"
     )
-    include_brand = st.toggle("Append brand name", value=False)
-    brand_name = st.text_input("Brand Name (exact casing)") if include_brand else ""
-    full_brand_name = st.text_input(
-        "Full Brand Name (for abbreviation expansion)",
-        help="e.g. if brand is DSB, enter Dayson Shalabi Burkert to expand filter words"
+    st.divider()
+    st.header("Brand")
+
+    brand_name = st.text_input(
+        "Brand Name (exact casing)",
+        placeholder="Acme Inc.",
+        help="Used for copy casing correction and branded term filtering."
     )
+    full_brand_name = st.text_input(
+        "Full Brand Name (optional)",
+        placeholder="Dayson Shalabi Burkert",
+        help="If the brand is an abbreviation (e.g. DSB), enter the full name. Each word is added to the branded filter."
+    )
+    include_brand = st.toggle("Include brand name in copy", value=False)
+    branded_terms_input = st.text_area(
+        "Additional Branded Terms to Exclude (one per line)",
+        placeholder="acme\nacme inc",
+        height=60,
+        help="Partial match. 'acme' excludes any query containing 'acme'. Merges with auto-detected terms."
+    )
+
+    st.divider()
+    st.header("Keyword Filters")
+
     position_cutoff = st.number_input(
         "Position cutoff (exclude <= this)",
         value=1.0, step=0.5,
@@ -153,7 +171,100 @@ if st.session_state.input_df is not None:
 
     st.dataframe(df_preview.head(5), use_container_width=True)
 
-    st.header("3. Run")
+    # ── Section 3: Brand Detection ──────────────────────────────────────────
+    st.header("3. Brand Detection")
+    st.caption(
+        "Auto-detect branded GSC queries using CTR, position, and domain word signals. "
+        "Detected terms merge with any manually entered terms in the sidebar."
+    )
+
+    detect_btn = st.button("Auto-detect Branded Terms")
+
+    if detect_btn:
+        if not gsc_site_url:
+            st.error("Enter your GSC Site URL in the sidebar first.")
+        else:
+            try:
+                import re as _re
+                sa_info = st.session_state.sa_info
+                _gsc = get_gsc_client(sa_info)
+                _df = st.session_state.input_df
+                _urls = _df[url_col].dropna().astype(str).tolist()[:10]
+
+                _all_queries = {}
+                with st.spinner("Sampling GSC queries for brand detection..."):
+                    for _u in _urls:
+                        _rows = get_top_queries_for_url(_gsc, gsc_site_url, _u.strip(), top_n=20)
+                        for _r in _rows:
+                            _q = _r["query"].lower().strip()
+                            if _q not in _all_queries:
+                                _all_queries[_q] = _r
+
+                # Build domain word set + full brand name expansion
+                _domain_raw = _re.sub(r"https?://|www\.|sc-domain:", "", gsc_site_url).rstrip("/")
+                _domain_parts = set(_re.findall(r"[a-z]+", _domain_raw.lower()))
+                _domain_parts -= {"com", "net", "org", "co", "uk", "io", "house", "app",
+                                   "law", "firm", "group", "inc", "llc", "ltd"}
+
+                _full_name_parts = set(
+                    w.lower() for w in _re.findall(r"[a-zA-Z]+", full_brand_name)
+                    if len(w) >= 3
+                ) if full_brand_name else set()
+                _domain_parts = _domain_parts | _full_name_parts
+
+                _detected = {}
+                for _q, _r in _all_queries.items():
+                    _imp = _r.get("impressions", 0)
+                    _clk = _r.get("clicks", 0)
+                    _pos = _r.get("position", 99)
+                    _ctr = _clk / _imp if _imp > 0 else 0
+                    _reasons = []
+
+                    if _ctr >= 0.15 and _imp >= 10:
+                        _reasons.append(f"CTR {round(_ctr * 100)}%")
+                    if _pos <= 2.0 and _clk >= 5:
+                        _reasons.append(f"pos {round(_pos, 1)}")
+
+                    _q_words = set(_re.findall(r"[a-z]+", _q))
+                    _dom_match = _domain_parts & _q_words
+                    if _dom_match:
+                        _reasons.append(f"domain word: {', '.join(sorted(_dom_match))}")
+
+                    if _reasons:
+                        _root = sorted(_dom_match, key=len)[0] if _dom_match else _q.split()[0]
+                        if _root not in _detected:
+                            _detected[_root] = {"queries": [], "reasons": set()}
+                        _detected[_root]["queries"].append(_q)
+                        _detected[_root]["reasons"].update(_reasons)
+
+                st.session_state.detected_branded = _detected
+
+                if not _detected:
+                    st.info("No branded terms detected. Use manual entry in the sidebar if needed.")
+
+            except Exception as e:
+                st.error(f"Brand detection failed: {e}")
+
+    if st.session_state.get("detected_branded"):
+        st.caption("Checked terms will be excluded from keyword scoring.")
+        _confirmed = {}
+        for _root, _data in st.session_state.detected_branded.items():
+            _reason_str = " | ".join(sorted(_data["reasons"]))
+            _sample = ", ".join(_data["queries"][:5])
+            _checked = st.checkbox(
+                f"`{_root}` — {_reason_str}",
+                value=True,
+                key=f"brand_chk_{_root}",
+                help=f"Excludes queries: {_sample}"
+            )
+            if _checked:
+                _confirmed[_root] = _data
+        st.session_state.confirmed_branded = list(_confirmed.keys())
+    elif "detected_branded" not in st.session_state:
+        st.caption("Run auto-detect above, or enter terms manually in the sidebar.")
+
+    # ── Section 4: Run ──────────────────────────────────────────────────────
+    st.header("4. Run")
     run_btn = st.button("Generate Intros", type="primary")
 
     if run_btn:
@@ -175,15 +286,24 @@ if st.session_state.input_df is not None:
                 st.error(f"GSC client init failed: {e}")
                 st.stop()
 
-            # Build branded terms filter list
+            # Build branded terms filter list: auto-detected + manual sidebar + brand name words
             branded_terms = []
+            # Auto-detected (confirmed via checkboxes)
+            branded_terms.extend(st.session_state.get("confirmed_branded", []))
+            # Manual sidebar entries
+            if branded_terms_input:
+                branded_terms.extend([
+                    t.strip().lower() for t in branded_terms_input.splitlines() if t.strip()
+                ])
+            # Brand name itself
             if brand_name:
                 branded_terms.append(brand_name.lower())
+            # Full brand name expansion words
             if full_brand_name:
                 branded_terms.extend([
-                    w.lower() for w in full_brand_name.split()
-                    if len(w) > 2
+                    w.lower() for w in full_brand_name.split() if len(w) > 2
                 ])
+            branded_terms = list(set(branded_terms))
 
             results = []
             df = st.session_state.input_df.copy()
