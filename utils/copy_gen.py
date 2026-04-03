@@ -35,6 +35,74 @@ BUSINESS_TYPE_CONTEXT = {
     ),
 }
 
+PAGE_TEMPLATE_CONTEXT = {
+    "category": (
+        "PAGE TEMPLATE: Ecommerce Category\n"
+        "Reader mindset: early-stage browsing, not yet ready to buy. They want orientation, not a sales pitch.\n"
+        "Rules:\n"
+        "- Lead with what the collection contains and who it is for. Write about the range, not a single product.\n"
+        "- Reference product types, materials, use cases, or brands from the page content if available.\n"
+        "- Breadth over depth. The reader is exploring options, not comparing specs.\n"
+        "- No hard CTA. No 'buy now', 'shop now', 'order today', or urgency language of any kind.\n"
+        "- No superlatives about the store itself. Describe what the products do.\n"
+        "- Keep it tight. This intro sits above a product grid. Every sentence must earn its place."
+    ),
+    "product": (
+        "PAGE TEMPLATE: Product Page\n"
+        "Reader mindset: bottom of funnel. They have narrowed their options and want confirmation this is the right choice.\n"
+        "Rules:\n"
+        "- Lead with the primary use case and one concrete differentiator. Not the category, not the brand story.\n"
+        "- Functional language only: what it does, how it performs, who it is built for.\n"
+        "- One soft implicit CTA signal is acceptable in the closing sentence (e.g. availability, options, variants).\n"
+        "- If page content includes specs, materials, or dimensions, reference the most relevant one specifically.\n"
+        "- Do not describe the product category. Describe this specific product."
+    ),
+    "service_lp": (
+        "PAGE TEMPLATE: Service Page / Landing Page\n"
+        "Reader mindset: problem-aware and evaluating solutions. They have a need and are checking if this service fits.\n"
+        "Rules:\n"
+        "- Open with the problem or situation the reader is in, then introduce the service as the resolution.\n"
+        "- Outcome-first, not feature-first. What the reader gets, not what the service includes.\n"
+        "- One soft CTA signal in the closing sentence is appropriate (e.g. 'get in touch', 'find out how').\n"
+        "- B2B: no urgency language, no consumer emotional framing. Capability and result only.\n"
+        "- B2C: 'you' language is encouraged. Light emotional framing is acceptable.\n"
+        "- Never list service features in the intro. Features belong further down the page."
+    ),
+    "location": (
+        "PAGE TEMPLATE: Location Page\n"
+        "Reader mindset: local intent and high urgency. They searched for a service in a specific area.\n"
+        "Rules:\n"
+        "- The service and location must both appear naturally within the first 15 words. This is the single most important rule for this template.\n"
+        "- Ground the copy in the location. Do not write generic service copy with a city name appended at the end.\n"
+        "- If page content references specific service areas, neighborhoods, or local context, weave in one specific detail.\n"
+        "- Tone is direct and community-aware. Not corporate, not national-scale.\n"
+        "- One soft CTA is acceptable (e.g. 'serving [location]', 'contact the [location] team').\n"
+        "- Never produce copy that reads like a national page with a city name swapped in."
+    ),
+    "blog": (
+        "PAGE TEMPLATE: Blog / Editorial\n"
+        "Reader mindset: informational. They want to learn something, not buy.\n"
+        "Rules:\n"
+        "- Lead with the question, problem, or topic being addressed. Never use 'In this article we will...'.\n"
+        "- The hook can be a counterintuitive statement, the reader's situation framed directly, or a specific question.\n"
+        "- Informational tone throughout. No conversion language, no service promotion whatsoever.\n"
+        "- No CTA of any kind in the intro.\n"
+        "- If placing the primary keyword in the first sentence disrupts the hook, place it in the second sentence instead.\n"
+        "- Do not summarise what the article covers. Draw the reader into the topic."
+    ),
+    "brand": (
+        "PAGE TEMPLATE: Brand / About Page\n"
+        "Reader mindset: curious and evaluating trust. They want to understand who this company is.\n"
+        "Rules:\n"
+        "- Lead with what the company stands for or does, not the keyword.\n"
+        "- Keyword placement is secondary here. Apply it where it fits naturally, not forced into the first 40 words.\n"
+        "- If a brand name is provided, it belongs in the first sentence.\n"
+        "- Tone should reflect brand voice. This is the one template where voice matters more than keyword logic.\n"
+        "- No CTA of any kind.\n"
+        "- No feature or service list. This is positioning copy, not a service description."
+    ),
+}
+
 RATE_LIMITS = {
     "Claude": 0.5,
     "OpenAI": 0.5,
@@ -71,6 +139,7 @@ def _build_prompt(
     primary_keyword: str,
     supporting_keywords: list,
     business_type: str,
+    page_template: str,
     brand_name: str,
     include_brand: bool,
     word_count: int,
@@ -79,7 +148,9 @@ def _build_prompt(
     page_context: str = ""
 ) -> str:
     biz_context = BUSINESS_TYPE_CONTEXT.get(business_type, BUSINESS_TYPE_CONTEXT["general"])
+    template_context = PAGE_TEMPLATE_CONTEXT.get(page_template, "")
     supporting_list = ", ".join(supporting_keywords) if supporting_keywords else "none"
+
     brand_instruction = (
         f'You may include the brand name "{brand_name}" once if it fits naturally. '
         "It must appear in exact casing as written here. Do not force it."
@@ -92,10 +163,18 @@ def _build_prompt(
         else f"Write exactly {paragraph_count} short paragraphs."
     )
 
-    context_block = ""
+    # Keyword placement rule varies by template
+    if page_template == "brand":
+        keyword_rule = "- The primary keyword should appear naturally in the copy. Do not force it into a specific position."
+    elif page_template == "blog":
+        keyword_rule = "- The primary keyword should appear naturally. If placing it in the first sentence disrupts the hook, use the second sentence instead."
+    else:
+        keyword_rule = "- The primary keyword must appear naturally within the first 40 words."
+
+    scraped_block = ""
     if page_context and page_context.strip():
-        context_block = f"""
-PAGE CONTENT (scraped from live page — use this to understand what the page covers, the specific products/services/topics it focuses on, and any distinguishing details worth referencing in the intro)
+        scraped_block = f"""
+PAGE CONTENT (scraped from the live page — use specific details to make the intro concrete: product types, services, materials, locations, differentiators. Do not write generic copy when this is available.)
 ---
 {page_context.strip()}
 ---
@@ -103,28 +182,32 @@ PAGE CONTENT (scraped from live page — use this to understand what the page co
 
     return f"""You are writing an SEO page introduction for the following page.
 
-PAGE CONTEXT
+PAGE DETAILS
 H1: {h1}
-Page type: {page_type or "not specified"}
+Page type label: {page_type or "not specified"}
 Primary keyword: {primary_keyword}
-Supporting keywords (weave in naturally, do not list): {supporting_list}
-{context_block}
+Supporting keywords (weave in naturally, never list them): {supporting_list}
+{scraped_block}
 BUSINESS TYPE RULES
 {biz_context}
 
-COPY RULES
+PAGE TEMPLATE RULES
+{template_context}
+
+UNIVERSAL COPY RULES
 - {para_instruction}
 - Target length: approximately {word_count} words total.
-- The primary keyword must appear naturally within the first 40 words.
-- Supporting keywords should appear once each where they fit naturally. Do not force them.
+- {keyword_rule}
+- Supporting keywords should appear once each where they fit. Do not force any of them.
 - Never produce a keyword list, bullet list, or heading inside the copy.
-- This paragraph follows directly from the H1. Do not repeat the H1 verbatim.
-- If page content is provided above, use specific details from it (products, services, topics, differentiators) to make the intro concrete and specific to this page. Do not write generic copy.
+- This intro follows directly from the H1. Do not repeat the H1 verbatim.
 - No em dashes anywhere. Use commas or short sentences instead.
-- No filler openers: never start with "Welcome to", "In today's", "Are you looking for", "If you're".
-- No marketing superlatives: avoid "best", "leading", "world-class", "cutting-edge".
-- Write in active voice. Vary sentence length.
+- Never start with: "Welcome to", "In today's", "Are you looking for", "If you're", "Whether you're".
+- No marketing superlatives: avoid "best", "leading", "world-class", "cutting-edge", "top-notch".
+- Active voice. Vary sentence length.
 - {brand_instruction}
+
+The page template rules take priority over the universal copy rules where they conflict.
 
 Return only the intro copy. No preamble, no explanation, no markdown."""
 
@@ -134,6 +217,7 @@ def generate_intro(
     primary_keyword: str,
     supporting_keywords: list,
     business_type: str,
+    page_template: str,
     brand_name: str,
     include_brand: bool,
     word_count: int,
@@ -153,6 +237,7 @@ def generate_intro(
         primary_keyword=primary_keyword,
         supporting_keywords=supporting_keywords,
         business_type=business_type,
+        page_template=page_template,
         brand_name=brand_name,
         include_brand=include_brand,
         word_count=word_count,

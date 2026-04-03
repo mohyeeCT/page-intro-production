@@ -67,6 +67,19 @@ with st.sidebar:
         "Business Type",
         ["b2b", "b2c", "ecommerce", "service", "local", "general"]
     )
+    page_template = st.selectbox(
+        "Page Template",
+        ["category", "product", "service_lp", "location", "blog", "brand"],
+        format_func=lambda x: {
+            "category": "Category (ecommerce)",
+            "product": "Product Page",
+            "service_lp": "Service / Landing Page",
+            "location": "Location Page",
+            "blog": "Blog / Editorial",
+            "brand": "Brand / About",
+        }[x],
+        help="Controls structural intent, keyword placement, and CTA rules for the intro."
+    )
     word_count = st.select_slider(
         "Target Word Count",
         options=[60, 80, 100, 120, 150, 180],
@@ -301,6 +314,7 @@ if st.session_state.input_df is not None:
                         primary_keyword=cluster["primary_keyword"],
                         supporting_keywords=cluster["supporting_keywords"],
                         business_type=business_type,
+                        page_template=page_template,
                         brand_name=brand_name,
                         include_brand=include_brand,
                         word_count=int(word_count),
