@@ -24,10 +24,9 @@ if "ws" not in st.session_state:
 with st.sidebar:
     st.header("Credentials")
 
-    sa_json_raw = st.text_area(
-        "Service Account JSON",
-        height=120,
-        help="Paste the full service account JSON. Used for both Sheets and GSC."
+    sa_file = st.file_uploader(
+        "Service Account JSON", type=["json"],
+        help="Same service account used for Google Sheets and GSC access."
     )
 
     dfs_login = st.text_input("DataForSEO Login", value="mo@brandvoxx.com")
@@ -42,8 +41,6 @@ with st.sidebar:
     st.divider()
     st.header("Job Config")
 
-    sheet_url = st.text_input("Google Sheet URL")
-    worksheet_name = st.text_input("Worksheet name (blank = first sheet)", value="")
     gsc_site_url = st.text_input(
         "GSC Site URL",
         help="Match exactly: sc-domain:example.com or https://example.com/"
@@ -83,35 +80,41 @@ with st.sidebar:
     )
     min_volume = st.number_input("Min Search Volume", value=10, step=5)
 
-# ── Column mapping ──────────────────────────────────────────────────────────
-st.subheader("1. Load Sheet")
-load_btn = st.button("Load Sheet")
+# ── Section 1: Connect to Google Sheet ─────────────────────────────────────
+st.header("1. Connect to Google Sheet")
 
-if load_btn:
-    errors = []
-    if not sa_json_raw:
-        errors.append("Service account JSON is required.")
-    if not sheet_url:
-        errors.append("Sheet URL is required.")
-    if errors:
-        for e in errors:
-            st.error(e)
-    else:
-        try:
-            sa_info = json.loads(sa_json_raw)
-            gc = get_gspread_client(sa_info)
-            df, ws = load_sheet(gc, sheet_url, worksheet_name or None)
-            st.session_state.input_df = df
-            st.session_state.ws = ws
-            st.success(f"Loaded {len(df)} rows.")
-        except Exception as e:
-            st.error(f"Sheet load failed: {e}")
+col1, col2 = st.columns([3, 1])
+with col1:
+    sheet_url = st.text_input(
+        "Google Sheet URL",
+        placeholder="https://docs.google.com/spreadsheets/d/..."
+    )
+with col2:
+    worksheet_name = st.text_input("Worksheet name", placeholder="Leave blank for first sheet")
+
+if sheet_url and sa_file:
+    try:
+        sa_info = json.load(sa_file)
+        sa_email = sa_info.get("client_email", "unknown")
+        st.info(f"Service account: **{sa_email}** — confirm this has Editor access to the sheet.")
+        gc = get_gspread_client(sa_info)
+        df, ws = load_sheet(gc, sheet_url, worksheet_name or None)
+        st.session_state.input_df = df
+        st.session_state.ws = ws
+        st.session_state.sa_info = sa_info
+        st.success(f"Connected. {len(df)} rows loaded.")
+    except Exception as e:
+        st.error(f"Sheet load failed: {e}")
+        st.caption(
+            "Common causes: sheet not shared with the service account, "
+            "wrong URL, or Sheets API not enabled in Cloud Console."
+        )
 
 if st.session_state.input_df is not None:
     df_preview = st.session_state.input_df
     cols = df_preview.columns.tolist()
 
-    st.subheader("2. Map Columns")
+    st.header("2. Map Columns")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         url_col = st.selectbox("URL column", cols)
@@ -124,7 +127,7 @@ if st.session_state.input_df is not None:
 
     st.dataframe(df_preview.head(5), use_container_width=True)
 
-    st.subheader("3. Run")
+    st.header("3. Run")
     run_btn = st.button("Generate Intros", type="primary")
 
     if run_btn:
@@ -140,7 +143,7 @@ if st.session_state.input_df is not None:
                 st.error(e)
         else:
             try:
-                sa_info = json.loads(sa_json_raw)
+                sa_info = st.session_state.sa_info
                 gsc_client = get_gsc_client(sa_info)
             except Exception as e:
                 st.error(f"GSC client init failed: {e}")
@@ -318,7 +321,7 @@ if st.session_state.input_df is not None:
 if st.session_state.results_df is not None:
     results_df = st.session_state.results_df
 
-    st.subheader("4. Results")
+    st.header("4. Results")
 
     ok = results_df[results_df["status"] == "ok"]
     skipped = results_df[results_df["status"] != "ok"]
