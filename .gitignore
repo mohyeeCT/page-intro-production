@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.env
+*.json
+!example_service_account.json
+.streamlit/secrets.toml
+.DS_Store
