@@ -7,6 +7,7 @@ from utils.gsc import get_gsc_client, get_top_queries_for_url
 from utils.dfs import get_ranked_keywords_for_url, get_keyword_volume_difficulty, merge_keyword_pools
 from utils.keyword import score_keyword_pool
 from utils.copy_gen import generate_intro
+from utils.scraper import scrape_page_context
 
 st.set_page_config(page_title="Page Intro Production", layout="wide")
 st.title("Page Intro Production")
@@ -31,6 +32,18 @@ with st.sidebar:
 
     dfs_login = st.text_input("DataForSEO Login", value="mo@brandvoxx.com")
     dfs_password = st.text_input("DataForSEO Password", type="password")
+
+    st.divider()
+    st.header("Jina Reader")
+    jina_key = st.text_input(
+        "Jina API Key", type="password",
+        help="Free at jina.ai — 10M tokens, no card required. Without a key it still works at 20 RPM."
+    )
+    enable_scraping = st.toggle(
+        "Enable page scraping",
+        value=False,
+        help="Scrapes each page via Jina Reader and passes the content to the AI to ground copy in actual page detail."
+    )
 
     st.divider()
     st.header("AI Provider")
@@ -270,7 +283,18 @@ if st.session_state.input_df is not None:
                         })
                         continue
 
-                    # Step 6: Generate intro copy
+                    # Step 6: Optionally scrape page for content context
+                    page_context = ""
+                    if enable_scraping:
+                        status_area.info(f"[{i+1}] Scraping page content...")
+                        scrape_result = scrape_page_context(jina_key, url, max_chars=2000)
+                        if scrape_result["success"]:
+                            page_context = scrape_result["content"]
+                        else:
+                            # Non-fatal — log and continue without context
+                            st.warning(f"Row {i+1}: scrape failed ({scrape_result['error']}), continuing without page context.")
+
+                    # Step 7: Generate intro copy
                     status_area.info(f"[{i+1}] Generating copy with {provider}...")
                     intro = generate_intro(
                         h1=h1,
@@ -283,7 +307,8 @@ if st.session_state.input_df is not None:
                         paragraph_count=int(paragraph_count),
                         page_type=page_type,
                         provider=provider,
-                        api_key=api_key
+                        api_key=api_key,
+                        page_context=page_context
                     )
 
                     actual_word_count = len(intro.split())

@@ -75,7 +75,8 @@ def _build_prompt(
     include_brand: bool,
     word_count: int,
     paragraph_count: int,
-    page_type: str = ""
+    page_type: str = "",
+    page_context: str = ""
 ) -> str:
     biz_context = BUSINESS_TYPE_CONTEXT.get(business_type, BUSINESS_TYPE_CONTEXT["general"])
     supporting_list = ", ".join(supporting_keywords) if supporting_keywords else "none"
@@ -91,6 +92,15 @@ def _build_prompt(
         else f"Write exactly {paragraph_count} short paragraphs."
     )
 
+    context_block = ""
+    if page_context and page_context.strip():
+        context_block = f"""
+PAGE CONTENT (scraped from live page — use this to understand what the page covers, the specific products/services/topics it focuses on, and any distinguishing details worth referencing in the intro)
+---
+{page_context.strip()}
+---
+"""
+
     return f"""You are writing an SEO page introduction for the following page.
 
 PAGE CONTEXT
@@ -98,7 +108,7 @@ H1: {h1}
 Page type: {page_type or "not specified"}
 Primary keyword: {primary_keyword}
 Supporting keywords (weave in naturally, do not list): {supporting_list}
-
+{context_block}
 BUSINESS TYPE RULES
 {biz_context}
 
@@ -109,6 +119,7 @@ COPY RULES
 - Supporting keywords should appear once each where they fit naturally. Do not force them.
 - Never produce a keyword list, bullet list, or heading inside the copy.
 - This paragraph follows directly from the H1. Do not repeat the H1 verbatim.
+- If page content is provided above, use specific details from it (products, services, topics, differentiators) to make the intro concrete and specific to this page. Do not write generic copy.
 - No em dashes anywhere. Use commas or short sentences instead.
 - No filler openers: never start with "Welcome to", "In today's", "Are you looking for", "If you're".
 - No marketing superlatives: avoid "best", "leading", "world-class", "cutting-edge".
@@ -130,6 +141,7 @@ def generate_intro(
     page_type: str,
     provider: str,
     api_key: str,
+    page_context: str = "",
     model_overrides: dict = None
 ) -> str:
     """
@@ -145,7 +157,8 @@ def generate_intro(
         include_brand=include_brand,
         word_count=word_count,
         paragraph_count=paragraph_count,
-        page_type=page_type
+        page_type=page_type,
+        page_context=page_context
     )
 
     raw = ""
