@@ -252,7 +252,7 @@ def generate_intro(
         if provider == "Claude":
             import anthropic
             client = anthropic.Anthropic(api_key=api_key)
-            model = (model_overrides or {}).get("claude", "claude-3-5-haiku-20241022")
+            model = (model_overrides or {}).get("claude", "claude-haiku-4-5-20251001")
             msg = client.messages.create(
                 model=model,
                 max_tokens=600,
