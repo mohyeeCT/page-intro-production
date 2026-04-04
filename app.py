@@ -381,6 +381,38 @@ if st.session_state.input_df is not None:
                     # Step 4: Merge all keyword sources
                     pool = merge_keyword_pools(gsc_queries, dfs_ranked, manual_seeds_for_merge)
 
+                    # Step 4b: H1 fallback — if pool is empty, extract phrases from H1
+                    # and look them up in DFS so the row isn't skipped entirely
+                    if not pool and h1:
+                        import re as _re
+                        status_area.info(f"[{i+1}] No GSC/DFS data — using H1 as keyword fallback...")
+                        _stop = {"a","an","the","and","or","for","of","in","on","at","to",
+                                 "with","by","from","as","is","are","was","were","this","that"}
+                        _h1_words = [w.lower() for w in _re.findall(r"[a-zA-Z]+", h1)
+                                     if w.lower() not in _stop and len(w) > 2]
+                        # Build 1-2 word phrase seeds from H1
+                        _seeds = list(dict.fromkeys(
+                            [" ".join(_h1_words[j:j+2]) for j in range(len(_h1_words)-1)] +
+                            _h1_words
+                        ))[:6]
+                        if _seeds:
+                            _fallback_vd = get_keyword_volume_difficulty(
+                                dfs_login, dfs_password, _seeds,
+                                location_code=int(location_code)
+                            )
+                            for _s in _seeds:
+                                _vd = _fallback_vd.get(_s.lower(), {})
+                                pool.append({
+                                    "query": _s,
+                                    "volume": _vd.get("volume", 0),
+                                    "difficulty": _vd.get("difficulty", 50),
+                                    "position": 50,
+                                    "impressions": 0,
+                                    "clicks": 0,
+                                    "ctr": 0,
+                                    "source": "h1_fallback"
+                                })
+
                     if not pool:
                         results.append({
                             "url": url,
@@ -446,10 +478,15 @@ if st.session_state.input_df is not None:
                     )
 
                     actual_word_count = len(intro.split())
-                    cluster_sources = list(set(
+                    # Flatten all source strings, split on "+", deduplicate, rejoin
+                    _raw_sources = (
                         [cluster["primary_data"].get("source", "")] +
                         [k.get("source", "") for k in cluster["supporting_data"]]
-                    ))
+                    )
+                    _source_parts = []
+                    for s in _raw_sources:
+                        _source_parts.extend(s.split("+"))
+                    cluster_sources = "+".join(dict.fromkeys(p for p in _source_parts if p))
 
                     results.append({
                         "url": url,
@@ -457,7 +494,7 @@ if st.session_state.input_df is not None:
                         "primary_keyword": cluster["primary_keyword"],
                         "supporting_keywords": ", ".join(cluster["supporting_keywords"]),
                         "word_count": actual_word_count,
-                        "cluster_source": "+".join(cluster_sources),
+                        "cluster_source": cluster_sources,
                         "status": "ok"
                     })
 
