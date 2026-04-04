@@ -8,8 +8,10 @@ def scrape_page_context(api_key: str, url: str, max_chars: int = 2000) -> dict:
     """
     Scrape a page via Jina Reader and return truncated topic context.
 
-    Uses GET https://r.jina.ai/{url} with Accept: application/json
-    to get structured JSON back (title + content fields).
+    Uses GET https://r.jina.ai/{url} with Accept: application/json.
+    No X-Target-Selector — Jina's built-in Readability handles content
+    extraction and nav/footer stripping server-side. The selector was
+    causing 422 on any page where the CSS selectors didn't match.
 
     Returns:
         { "content": str, "title": str, "success": bool, "error": str }
@@ -22,11 +24,6 @@ def scrape_page_context(api_key: str, url: str, max_chars: int = 2000) -> dict:
         "X-Return-Format": "markdown",
         "X-With-Links-Summary": "false",
         "X-With-Images-Summary": "false",
-        "X-Target-Selector": (
-            "main, #MainContent, #main-content, article, "
-            ".page-content, .entry-content, .post-content, [role='main']"
-        ),
-        "X-Timeout": "30",
     }
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -50,7 +47,7 @@ def scrape_page_context(api_key: str, url: str, max_chars: int = 2000) -> dict:
         # Drop image lines
         text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
 
-        # Drop pure link-list lines (nav remnants)
+        # Drop pure link-list lines
         text = re.sub(r"^\s*\*\s+\[.+?\]\(https?://.+?\)\s*$", "", text, flags=re.MULTILINE)
 
         # Collapse whitespace
