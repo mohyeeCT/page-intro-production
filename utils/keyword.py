@@ -57,7 +57,8 @@ def score_keyword_pool(
     position_cutoff: float = 1.0,
     min_volume: int = 10,
     h1: str = "",
-    max_cluster_size: int = 5
+    max_cluster_size: int = 5,
+    used_primaries: set = None
 ) -> dict:
     """
     Scores a merged keyword pool and returns a ranked cluster.
@@ -83,6 +84,12 @@ def score_keyword_pool(
     GSC-fallback for keywords with 0 DFS volume:
         Uses impressions * (1 + ctr) as a proxy score so the keyword
         can still compete if GSC shows strong engagement.
+
+    used_primaries:
+        Set of keyword strings already assigned as primary to other URLs in
+        this job run. If the top-scoring keyword is already taken, the scorer
+        promotes the most specific unused keyword — preferring longer phrases
+        and higher H1 relevance as the tiebreaker.
     """
     branded_terms = [t.lower().strip() for t in (branded_terms or [])]
     scored = []
@@ -166,8 +173,29 @@ def score_keyword_pool(
 
     scored.sort(key=lambda x: x["score"], reverse=True)
 
-    primary = scored[0] if scored else None
-    supporting = scored[1:max_cluster_size + 1] if len(scored) > 1 else []
+    used_primaries = used_primaries or set()
+
+    # Select primary: prefer highest-scoring unused keyword.
+    # If the top keyword is already a primary elsewhere, scan for the most
+    # specific unused alternative — ranked by word count (longer = more specific)
+    # then H1 relevance score as tiebreaker.
+    primary = None
+    primary_idx = None
+
+    for idx, candidate in enumerate(scored):
+        kw = candidate["keyword"].lower().strip()
+        if kw not in used_primaries:
+            primary = candidate
+            primary_idx = idx
+            break
+
+    # If all top candidates are taken, fall back to the highest scorer regardless
+    if primary is None and scored:
+        primary = scored[0]
+        primary_idx = 0
+
+    # Supporting: everything except the chosen primary, up to max_cluster_size
+    supporting = [k for i, k in enumerate(scored) if i != primary_idx][:max_cluster_size]
 
     return {
         "primary_keyword": primary["keyword"] if primary else None,

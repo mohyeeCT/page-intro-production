@@ -306,6 +306,7 @@ if st.session_state.input_df is not None:
             branded_terms = list(set(branded_terms))
 
             results = []
+            used_primaries = set()  # tracks assigned primary keywords across all rows
             df = st.session_state.input_df.copy()
             progress = st.progress(0, text="Starting...")
             status_area = st.empty()
@@ -327,6 +328,8 @@ if st.session_state.input_df is not None:
                         "primary_keyword": "",
                         "supporting_keywords": "",
                         "word_count": 0,
+                        "primary_volume": "",
+                        "primary_difficulty": "",
                         "cluster_source": "",
                         "status": "skipped: no URL"
                     })
@@ -433,7 +436,8 @@ if st.session_state.input_df is not None:
                         position_cutoff=float(position_cutoff),
                         min_volume=int(min_volume),
                         h1=h1,
-                        max_cluster_size=int(max_cluster_size)
+                        max_cluster_size=int(max_cluster_size),
+                        used_primaries=used_primaries
                     )
 
                     if cluster["fallback_triggered"] or not cluster["primary_keyword"]:
@@ -443,10 +447,15 @@ if st.session_state.input_df is not None:
                             "primary_keyword": "",
                             "supporting_keywords": "",
                             "word_count": 0,
+                            "primary_volume": "",
+                            "primary_difficulty": "",
                             "cluster_source": "no scoreable keywords",
                             "status": "skipped: no scoreable keywords"
                         })
                         continue
+
+                    # Register this primary so subsequent rows avoid it
+                    used_primaries.add(cluster["primary_keyword"].lower().strip())
 
                     # Step 6: Optionally scrape page for content context
                     page_context = ""
@@ -488,12 +497,15 @@ if st.session_state.input_df is not None:
                         _source_parts.extend(s.split("+"))
                     cluster_sources = "+".join(dict.fromkeys(p for p in _source_parts if p))
 
+                    _pdata = cluster["primary_data"] or {}
                     results.append({
                         "url": url,
                         "intro_copy": intro,
                         "primary_keyword": cluster["primary_keyword"],
                         "supporting_keywords": ", ".join(cluster["supporting_keywords"]),
                         "word_count": actual_word_count,
+                        "primary_volume": _pdata.get("volume", ""),
+                        "primary_difficulty": _pdata.get("difficulty", ""),
                         "cluster_source": cluster_sources,
                         "status": "ok"
                     })
@@ -505,6 +517,8 @@ if st.session_state.input_df is not None:
                         "primary_keyword": "",
                         "supporting_keywords": "",
                         "word_count": 0,
+                        "primary_volume": "",
+                        "primary_difficulty": "",
                         "cluster_source": "",
                         "status": f"error: {e}"
                     })
@@ -528,7 +542,7 @@ if st.session_state.results_df is not None:
     col_c.metric("Avg Word Count", int(ok["word_count"].mean()) if len(ok) > 0 else 0)
 
     st.dataframe(
-        results_df[["url", "primary_keyword", "supporting_keywords", "word_count", "intro_copy", "cluster_source", "status"]],
+        results_df[["url", "primary_keyword", "primary_volume", "primary_difficulty", "supporting_keywords", "word_count", "intro_copy", "cluster_source", "status"]],
         use_container_width=True
     )
 
@@ -560,6 +574,8 @@ if st.session_state.results_df is not None:
                         result_col_map={
                             "intro_copy": "Intro Copy",
                             "primary_keyword": "Primary Keyword",
+                            "primary_volume": "Primary KW Volume",
+                            "primary_difficulty": "Primary KW Difficulty",
                             "supporting_keywords": "Supporting Keywords",
                             "word_count": "Word Count",
                             "cluster_source": "Cluster Source",
