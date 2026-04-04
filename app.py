@@ -423,6 +423,8 @@ if st.session_state.input_df is not None:
                             "primary_keyword": "",
                             "supporting_keywords": "",
                             "word_count": 0,
+                            "primary_volume": "",
+                            "primary_difficulty": "",
                             "cluster_source": "no data",
                             "status": "skipped: no keyword data"
                         })
