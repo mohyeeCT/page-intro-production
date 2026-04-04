@@ -1,15 +1,15 @@
 import re
 import requests
 
-JINA_READER_URL = "https://r.jina.ai/"
+JINA_BASE = "https://r.jina.ai/"
 
 
 def scrape_page_context(api_key: str, url: str, max_chars: int = 2000) -> dict:
     """
     Scrape a page via Jina Reader and return truncated topic context.
 
-    Uses POST to https://r.jina.ai/ with the URL in the request body,
-    which avoids encoding issues with the GET path-based approach.
+    Uses GET https://r.jina.ai/{url} with Accept: application/json
+    to get structured JSON back (title + content fields).
 
     Returns:
         { "content": str, "title": str, "success": bool, "error": str }
@@ -18,7 +18,6 @@ def scrape_page_context(api_key: str, url: str, max_chars: int = 2000) -> dict:
         return {"content": "", "title": "", "success": False, "error": "No URL provided"}
 
     headers = {
-        "Content-Type": "application/json",
         "Accept": "application/json",
         "X-Return-Format": "markdown",
         "X-With-Links-Summary": "false",
@@ -33,20 +32,17 @@ def scrape_page_context(api_key: str, url: str, max_chars: int = 2000) -> dict:
         headers["Authorization"] = f"Bearer {api_key}"
 
     try:
-        resp = requests.post(
-            JINA_READER_URL,
+        resp = requests.get(
+            f"{JINA_BASE}{url}",
             headers=headers,
-            json={"url": url},
             timeout=40
         )
         resp.raise_for_status()
 
         data = resp.json()
-        if not data.get("data"):
-            return {"content": "", "title": "", "success": False, "error": "Jina returned no data"}
-
-        text = data["data"].get("content", "") or ""
-        title = data["data"].get("title", "") or ""
+        page_data = data.get("data", {})
+        text = page_data.get("content", "") or ""
+        title = page_data.get("title", "") or ""
 
         if not text:
             return {"content": "", "title": title, "success": False, "error": "Jina returned empty content"}
@@ -64,7 +60,7 @@ def scrape_page_context(api_key: str, url: str, max_chars: int = 2000) -> dict:
         if not text:
             return {"content": "", "title": title, "success": False, "error": "No usable content after cleaning"}
 
-        # Take first half of cleaned content, capped at max_chars
+        # First half of content, capped at max_chars
         cutoff = min(max_chars, len(text) // 2 + 1)
         truncated = text[:cutoff]
 
