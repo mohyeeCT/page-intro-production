@@ -169,12 +169,21 @@ def score_keyword_pool(
         position_score = 1 / (1 + max(0, position - 20) * 0.1)
 
         # CTR boost
-        ctr_boost = 1 + min(ctr, 0.15)  # capped at 0.15 so high CTR on low-volume keywords cannot override volume as primary signal
+        ctr_boost = 1 + min(ctr, 0.15)
 
         # H1 topical relevance
         relevance = _relevance_score(query, h1)
 
-        score = (volume / difficulty) * math.log1p(impressions) * ctr_boost * position_score * relevance
+        if restricted_industry:
+            # Restricted mode: ignore volume/difficulty entirely for all keywords,
+            # including those that do have DFS volume. Levels the playing field so
+            # volume-suppressed keywords compete on equal GSC signals.
+            clicks_boost = max(math.log1p(clicks), 1.0)
+            score = math.log1p(impressions) * clicks_boost * ctr_boost * position_score * relevance
+            scoring_mode = "gsc_restricted"
+        else:
+            score = (volume / difficulty) * math.log1p(impressions) * ctr_boost * position_score * relevance
+            scoring_mode = "full"
 
         scored.append({
             "keyword": row.get("query"),
@@ -188,7 +197,7 @@ def score_keyword_pool(
             "relevance_score": round(relevance, 3),
             "score": round(score, 4),
             "source": row.get("source", "unknown"),
-            "scoring_mode": "full"
+            "scoring_mode": scoring_mode
         })
 
     scored.sort(key=lambda x: x["score"], reverse=True)
