@@ -71,7 +71,7 @@ def score_keyword_pool(
     - skipped_volume: count of keywords below min_volume
 
     Scoring formula:
-        score = (volume / difficulty) * log1p(impressions) * (1 + ctr) * position_score * relevance_score
+        score = (volume / difficulty) * log1p(impressions) * (1 + min(ctr, 0.15)) * position_score * relevance_score
 
     position_score:
         Positions 1-20 all score 1.0. Only position exactly <= position_cutoff is hard-filtered.
@@ -122,7 +122,7 @@ def score_keyword_pool(
         if volume == 0:
             if impressions > 0:
                 # Proxy score using engagement only - will rank below any keyword with volume
-                proxy_score = math.log1p(impressions) * (1 + ctr) * 0.1
+                proxy_score = math.log1p(impressions) * (1 + min(ctr, 0.15)) * 0.1
                 scored.append({
                     "keyword": row.get("query"),
                     "volume": 0,
@@ -149,7 +149,7 @@ def score_keyword_pool(
         position_score = 1 / (1 + max(0, position - 20) * 0.1)
 
         # CTR boost
-        ctr_boost = 1 + ctr
+        ctr_boost = 1 + min(ctr, 0.15)  # capped at 0.15 so high CTR on low-volume keywords cannot override volume as primary signal
 
         # H1 topical relevance
         relevance = _relevance_score(query, h1)
