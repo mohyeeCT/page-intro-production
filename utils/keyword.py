@@ -132,7 +132,10 @@ def score_keyword_pool(
                     # Restricted industry: DFS suppresses volume by policy.
                     # Score on GSC engagement alone, no penalty — these keywords
                     # compete on equal footing with volume-bearing keywords.
-                    proxy_score = math.log1p(impressions) * ctr_boost * pos_score * relevance
+                    # clicks_boost floors at 1.0 so zero-click keywords still score
+                    # rather than zeroing out, but high click volume is rewarded directly.
+                    clicks_boost = max(math.log1p(clicks), 1.0)
+                    proxy_score = math.log1p(impressions) * clicks_boost * ctr_boost * pos_score * relevance
                     scoring_mode = "gsc_restricted"
                 else:
                     # Standard fallback: volume just not indexed yet.
