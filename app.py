@@ -122,17 +122,21 @@ with st.sidebar:
         value=1.0, step=0.5,
         help="Only hard-excludes keywords at this position or better. Default 1.0."
     )
-    min_volume = st.number_input("Min Search Volume", value=10, step=5)
     restricted_industry = st.toggle(
         "Restricted Industry Mode",
         value=False,
         help=(
             "Enable for industries where Google/DFS suppress keyword volume data by policy: "
             "firearms, CBD, kratom, dispensaries, adult. "
-            "When on, zero-volume keywords with strong GSC signals (impressions, CTR, position) "
-            "score on equal footing with keywords that have DFS volume."
+            "When on, scoring focuses on clicks, impressions, and relevance — "
+            "volume filter is disabled and zero-volume keywords compete on equal footing."
         )
     )
+    if not restricted_industry:
+        min_volume = st.number_input("Min Search Volume", value=10, step=5)
+    else:
+        min_volume = 0
+        st.caption("Min volume filter disabled. Scoring on impressions, clicks, and relevance.")
 
 # ── Section 1: Connect to Google Sheet ─────────────────────────────────────
 st.header("1. Connect to Google Sheet")

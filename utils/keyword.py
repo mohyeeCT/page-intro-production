@@ -158,7 +158,7 @@ def score_keyword_pool(
                 skipped_volume += 1
             continue
 
-        if volume < min_volume:
+        if not restricted_industry and volume < min_volume:
             skipped_volume += 1
             continue
 
