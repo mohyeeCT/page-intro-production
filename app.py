@@ -657,17 +657,16 @@ if st.session_state.results_df is not None:
     st.subheader("Row Debug")
     for _, row in results_df.iterrows():
         row_label = row["url"][:70] + "..." if len(row["url"]) > 70 else row["url"]
-        status_icon = "✅" if row["status"] == "ok" else "❌"
-        with st.expander(f"{status_icon} {row_label}"):
+        with st.expander(row_label):
             if row["status"] != "ok":
                 st.error(f"Status: {row['status']}")
             else:
                 # Primary keyword selection
                 st.caption("**Primary Keyword Selection**")
                 tier_labels = {
-                    "manual": "🟣 Tier 1 — Manual keyword from sheet",
-                    "h1_derived": "🔵 Tier 2 — Derived from H1",
-                    "gsc+dfs": "🟢 Tier 3 — GSC + DFS scoring"
+                    "manual": "Tier 1 — Manual keyword from sheet",
+                    "h1_derived": "Tier 2 — Derived from H1",
+                    "gsc+dfs": "Tier 3 — GSC + DFS scoring"
                 }
                 tier = row.get("_debug_tier", "")
                 st.markdown(tier_labels.get(tier, f"Tier: {tier}"))
