@@ -336,87 +336,148 @@ if st.session_state.input_df is not None:
                     continue
 
                 try:
-                    # Step 1: GSC pull
+                    import re as _re
+
+                    # ── Priority chain for primary keyword selection ───────────────
+                    # Tier 1: Manual keyword from sheet — hard override, always primary
+                    # Tier 2: H1-derived phrases — primary if no manual keyword
+                    # Tier 3: GSC + DFS scoring — primary only if neither tier 1 nor 2 present
+                    # GSC and DFS ranked keywords always feed the supporting pool regardless of tier
+
+                    # Step 1: GSC pull (always runs — feeds supporting pool)
                     status_area.info(f"[{i+1}] Pulling GSC queries...")
                     gsc_queries = get_top_queries_for_url(gsc_client, gsc_site_url, url, top_n=10)
 
-                    # Step 2: DFS ranked keywords for this specific URL
+                    # Step 2: DFS ranked keywords (always runs — feeds supporting pool)
                     status_area.info(f"[{i+1}] Pulling DFS ranked keywords...")
                     dfs_ranked = get_ranked_keywords_for_url(
                         dfs_login, dfs_password, url,
                         location_code=int(location_code)
                     )
 
-                    # Step 3: Enrich manual seeds with DFS volume/difficulty if needed
+                    # Step 3: Determine primary keyword source and enrich accordingly
+                    forced_primary = None
+                    forced_primary_data = {}
+
                     if manual_seeds:
-                        status_area.info(f"[{i+1}] Enriching manual seeds...")
-                        known_keywords = {item["query"].lower() for item in dfs_ranked}
-                        seeds_needing_enrichment = [s for s in manual_seeds if s.lower() not in known_keywords]
-                        if seeds_needing_enrichment:
+                        # TIER 1: Manual keyword — enrich with DFS volume/difficulty, force as primary
+                        status_area.info(f"[{i+1}] Enriching manual keyword (Tier 1 primary)...")
+                        primary_seed = manual_seeds[0]  # first keyword in cell is primary
+                        extra_seeds = manual_seeds[1:]  # any additional are supporting candidates
+
+                        all_to_enrich = [s for s in manual_seeds
+                                         if s.lower() not in {item["query"].lower() for item in dfs_ranked}]
+                        if all_to_enrich:
                             enriched = get_keyword_volume_difficulty(
-                                dfs_login, dfs_password,
-                                seeds_needing_enrichment,
+                                dfs_login, dfs_password, all_to_enrich,
                                 location_code=int(location_code)
                             )
-                            # Inject enriched data back into manual seeds before merge
-                            enriched_seeds_dfs = []
-                            for s in manual_seeds:
-                                key = s.lower()
-                                if key in enriched:
-                                    enriched_seeds_dfs.append({
-                                        "query": s,
-                                        "volume": enriched[key].get("volume", 0),
-                                        "difficulty": enriched[key].get("difficulty", 50),
-                                        "position": 50,
-                                        "impressions": 0,
-                                        "clicks": 0,
-                                        "ctr": 0,
-                                        "source": "manual"
-                                    })
-                            # Add enriched manual items to dfs_ranked so merge picks them up
-                            dfs_ranked.extend(enriched_seeds_dfs)
-                            manual_seeds_for_merge = []  # already injected
                         else:
-                            manual_seeds_for_merge = manual_seeds
-                    else:
-                        manual_seeds_for_merge = []
+                            enriched = {}
 
-                    # Step 4: Merge all keyword sources
-                    pool = merge_keyword_pools(gsc_queries, dfs_ranked, manual_seeds_for_merge)
+                        # Build primary data from enrichment or DFS ranked match
+                        _dfs_map = {item["query"].lower(): item for item in dfs_ranked}
+                        _p_key = primary_seed.lower()
+                        if _p_key in _dfs_map:
+                            _p_item = _dfs_map[_p_key]
+                            forced_primary_data = {
+                                "keyword": primary_seed,
+                                "volume": _p_item.get("volume", 0),
+                                "difficulty": _p_item.get("difficulty", 50),
+                                "source": "manual"
+                            }
+                        elif _p_key in enriched:
+                            forced_primary_data = {
+                                "keyword": primary_seed,
+                                "volume": enriched[_p_key].get("volume", 0),
+                                "difficulty": enriched[_p_key].get("difficulty", 50),
+                                "source": "manual"
+                            }
+                        else:
+                            forced_primary_data = {
+                                "keyword": primary_seed,
+                                "volume": 0,
+                                "difficulty": 50,
+                                "source": "manual"
+                            }
+                        forced_primary = primary_seed
 
-                    # Step 4b: H1 fallback — if pool is empty, extract phrases from H1
-                    # and look them up in DFS so the row isn't skipped entirely
-                    if not pool and h1:
-                        import re as _re
-                        status_area.info(f"[{i+1}] No GSC/DFS data — using H1 as keyword fallback...")
-                        _stop = {"a","an","the","and","or","for","of","in","on","at","to",
-                                 "with","by","from","as","is","are","was","were","this","that"}
-                        _h1_words = [w.lower() for w in _re.findall(r"[a-zA-Z]+", h1)
-                                     if w.lower() not in _stop and len(w) > 2]
-                        # Build 1-2 word phrase seeds from H1
-                        _seeds = list(dict.fromkeys(
-                            [" ".join(_h1_words[j:j+2]) for j in range(len(_h1_words)-1)] +
-                            _h1_words
-                        ))[:6]
-                        if _seeds:
-                            _fallback_vd = get_keyword_volume_difficulty(
-                                dfs_login, dfs_password, _seeds,
-                                location_code=int(location_code)
-                            )
-                            for _s in _seeds:
-                                _vd = _fallback_vd.get(_s.lower(), {})
-                                pool.append({
-                                    "query": _s,
-                                    "volume": _vd.get("volume", 0),
-                                    "difficulty": _vd.get("difficulty", 50),
+                        # Remaining manual seeds join the supporting pool via DFS ranked
+                        for s in extra_seeds:
+                            key = s.lower()
+                            if key not in _dfs_map:
+                                vd = enriched.get(key, {})
+                                dfs_ranked.append({
+                                    "query": s,
+                                    "volume": vd.get("volume", 0),
+                                    "difficulty": vd.get("difficulty", 50),
                                     "position": 50,
                                     "impressions": 0,
                                     "clicks": 0,
                                     "ctr": 0,
-                                    "source": "h1_fallback"
+                                    "source": "manual"
                                 })
 
-                    if not pool:
+                    elif h1:
+                        # TIER 2: H1-derived phrases — enrich, use highest-volume phrase as primary
+                        status_area.info(f"[{i+1}] No manual keyword — deriving primary from H1 (Tier 2)...")
+                        _stop = {"a","an","the","and","or","for","of","in","on","at","to",
+                                 "with","by","from","as","is","are","was","were","this","that"}
+                        _h1_words = [w.lower() for w in _re.findall(r"[a-zA-Z]+", h1)
+                                     if w.lower() not in _stop and len(w) > 2]
+                        _h1_seeds = list(dict.fromkeys(
+                            [" ".join(_h1_words[j:j+2]) for j in range(len(_h1_words) - 1)] +
+                            _h1_words
+                        ))[:6]
+
+                        if _h1_seeds:
+                            _h1_vd = get_keyword_volume_difficulty(
+                                dfs_login, dfs_password, _h1_seeds,
+                                location_code=int(location_code)
+                            )
+                            # Pick highest-volume H1 phrase as the Tier 2 primary
+                            _h1_candidates = sorted(
+                                _h1_seeds,
+                                key=lambda s: _h1_vd.get(s.lower(), {}).get("volume", 0),
+                                reverse=True
+                            )
+                            _best_h1 = _h1_candidates[0]
+                            _best_vd = _h1_vd.get(_best_h1.lower(), {})
+                            forced_primary = _best_h1
+                            forced_primary_data = {
+                                "keyword": _best_h1,
+                                "volume": _best_vd.get("volume", 0),
+                                "difficulty": _best_vd.get("difficulty", 50),
+                                "source": "h1_derived"
+                            }
+                            # Add remaining H1 phrases to DFS ranked pool as supporting candidates
+                            _dfs_map = {item["query"].lower() for item in dfs_ranked}
+                            for _s in _h1_candidates[1:]:
+                                if _s.lower() not in _dfs_map:
+                                    _vd = _h1_vd.get(_s.lower(), {})
+                                    dfs_ranked.append({
+                                        "query": _s,
+                                        "volume": _vd.get("volume", 0),
+                                        "difficulty": _vd.get("difficulty", 50),
+                                        "position": 50,
+                                        "impressions": 0,
+                                        "clicks": 0,
+                                        "ctr": 0,
+                                        "source": "h1_derived"
+                                    })
+
+                    # Step 4: Merge GSC + DFS ranked into supporting pool
+                    # When a forced_primary exists, it is excluded from the pool
+                    # so it cannot appear again as a supporting keyword
+                    pool = merge_keyword_pools(gsc_queries, dfs_ranked, [])
+                    if forced_primary:
+                        pool = [k for k in pool if k["query"].lower() != forced_primary.lower()]
+
+                    # Step 5: Score the supporting pool (Tier 3 primary selection runs here
+                    # only when forced_primary is None — i.e. no manual keyword and no H1)
+                    status_area.info(f"[{i+1}] Scoring keyword pool...")
+
+                    if not pool and not forced_primary:
                         results.append({
                             "url": url,
                             "intro_copy": "",
@@ -430,34 +491,53 @@ if st.session_state.input_df is not None:
                         })
                         continue
 
-                    # Step 5: Score and build cluster
-                    status_area.info(f"[{i+1}] Scoring keyword cluster...")
-                    cluster = score_keyword_pool(
-                        keyword_pool=pool,
-                        branded_terms=branded_terms,
-                        position_cutoff=float(position_cutoff),
-                        min_volume=int(min_volume),
-                        h1=h1,
-                        max_cluster_size=int(max_cluster_size),
-                        used_primaries=used_primaries
-                    )
+                    if forced_primary:
+                        # Score the pool for supporting keywords only
+                        cluster = score_keyword_pool(
+                            keyword_pool=pool,
+                            branded_terms=branded_terms,
+                            position_cutoff=float(position_cutoff),
+                            min_volume=int(min_volume),
+                            h1=h1,
+                            max_cluster_size=int(max_cluster_size),
+                            used_primaries=used_primaries
+                        )
+                        # Override primary with the forced choice
+                        final_primary = forced_primary
+                        final_primary_data = forced_primary_data
+                        final_supporting = cluster["supporting_keywords"]
+                        cluster_tier = forced_primary_data.get("source", "manual")
+                    else:
+                        # TIER 3: No manual keyword, no H1 — GSC+DFS drives primary selection
+                        cluster = score_keyword_pool(
+                            keyword_pool=pool,
+                            branded_terms=branded_terms,
+                            position_cutoff=float(position_cutoff),
+                            min_volume=int(min_volume),
+                            h1=h1,
+                            max_cluster_size=int(max_cluster_size),
+                            used_primaries=used_primaries
+                        )
+                        if cluster["fallback_triggered"] or not cluster["primary_keyword"]:
+                            results.append({
+                                "url": url,
+                                "intro_copy": "",
+                                "primary_keyword": "",
+                                "supporting_keywords": "",
+                                "word_count": 0,
+                                "primary_volume": "",
+                                "primary_difficulty": "",
+                                "cluster_source": "no scoreable keywords",
+                                "status": "skipped: no scoreable keywords"
+                            })
+                            continue
+                        final_primary = cluster["primary_keyword"]
+                        final_primary_data = cluster["primary_data"] or {}
+                        final_supporting = cluster["supporting_keywords"]
+                        cluster_tier = "gsc+dfs"
 
-                    if cluster["fallback_triggered"] or not cluster["primary_keyword"]:
-                        results.append({
-                            "url": url,
-                            "intro_copy": "",
-                            "primary_keyword": "",
-                            "supporting_keywords": "",
-                            "word_count": 0,
-                            "primary_volume": "",
-                            "primary_difficulty": "",
-                            "cluster_source": "no scoreable keywords",
-                            "status": "skipped: no scoreable keywords"
-                        })
-                        continue
-
-                    # Register this primary so subsequent rows avoid it
-                    used_primaries.add(cluster["primary_keyword"].lower().strip())
+                    # Register primary to avoid reassignment in subsequent rows
+                    used_primaries.add(final_primary.lower().strip())
 
                     # Step 6: Optionally scrape page for content context
                     page_context = ""
@@ -474,8 +554,8 @@ if st.session_state.input_df is not None:
                     status_area.info(f"[{i+1}] Generating copy with {provider}...")
                     intro = generate_intro(
                         h1=h1,
-                        primary_keyword=cluster["primary_keyword"],
-                        supporting_keywords=cluster["supporting_keywords"],
+                        primary_keyword=final_primary,
+                        supporting_keywords=final_supporting,
                         business_type=business_type,
                         page_template=page_template,
                         brand_name=brand_name,
@@ -489,25 +569,25 @@ if st.session_state.input_df is not None:
                     )
 
                     actual_word_count = len(intro.split())
-                    # Flatten all source strings, split on "+", deduplicate, rejoin
+                    # Build cluster source label from primary tier + supporting sources
+                    _supporting_sources = cluster.get("supporting_data", []) if not forced_primary else []
                     _raw_sources = (
-                        [cluster["primary_data"].get("source", "")] +
-                        [k.get("source", "") for k in cluster["supporting_data"]]
+                        [final_primary_data.get("source", cluster_tier)] +
+                        [k.get("source", "") for k in _supporting_sources]
                     )
                     _source_parts = []
                     for s in _raw_sources:
                         _source_parts.extend(s.split("+"))
                     cluster_sources = "+".join(dict.fromkeys(p for p in _source_parts if p))
 
-                    _pdata = cluster["primary_data"] or {}
                     results.append({
                         "url": url,
                         "intro_copy": intro,
-                        "primary_keyword": cluster["primary_keyword"],
-                        "supporting_keywords": ", ".join(cluster["supporting_keywords"]),
+                        "primary_keyword": final_primary,
+                        "supporting_keywords": ", ".join(final_supporting),
                         "word_count": actual_word_count,
-                        "primary_volume": _pdata.get("volume", ""),
-                        "primary_difficulty": _pdata.get("difficulty", ""),
+                        "primary_volume": final_primary_data.get("volume", ""),
+                        "primary_difficulty": final_primary_data.get("difficulty", ""),
                         "cluster_source": cluster_sources,
                         "status": "ok"
                     })
