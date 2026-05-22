@@ -559,7 +559,7 @@ if st.session_state.input_df is not None:
                     page_context = ""
                     if enable_scraping:
                         status_area.info(f"[{i+1}] Scraping page content...")
-                        scrape_result = scrape_page_context(jina_key, url, max_chars=2000)
+                        scrape_result = scrape_page_context(jina_key, url, max_chars=8000)
                         if scrape_result["success"]:
                             page_context = scrape_result["content"]
                         else:
