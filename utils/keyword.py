@@ -58,7 +58,8 @@ def score_keyword_pool(
     min_volume: int = 10,
     h1: str = "",
     max_cluster_size: int = 5,
-    used_primaries: set = None
+    used_primaries: set = None,
+    restricted_industry: bool = False
 ) -> dict:
     """
     Scores a merged keyword pool and returns a ranked cluster.
@@ -70,8 +71,14 @@ def score_keyword_pool(
     - skipped_branded: count of branded terms filtered out
     - skipped_volume: count of keywords below min_volume
 
-    Scoring formula:
+    Scoring formula (standard):
         score = (volume / difficulty) * log1p(impressions) * (1 + min(ctr, 0.15)) * position_score * relevance_score
+
+    Scoring formula (restricted_industry=True, zero-volume keywords):
+        score = log1p(impressions) * (1 + min(ctr, 0.15)) * position_score * relevance_score
+        The 0.1 proxy penalty is removed. Zero-volume keywords with strong GSC signals
+        compete on equal footing. Used for industries where DFS/GKP suppress volume
+        data by policy (guns, CBD, kratom, dispensaries, adult).
 
     position_score:
         Positions 1-20 all score 1.0. Only position exactly <= position_cutoff is hard-filtered.
@@ -80,10 +87,6 @@ def score_keyword_pool(
     relevance_score:
         Word overlap between query and H1 using basic stemming.
         Range 0.5 (no overlap) to 1.5 (full overlap).
-
-    GSC-fallback for keywords with 0 DFS volume:
-        Uses impressions * (1 + ctr) as a proxy score so the keyword
-        can still compete if GSC shows strong engagement.
 
     used_primaries:
         Set of keyword strings already assigned as primary to other URLs in
@@ -118,11 +121,25 @@ def score_keyword_pool(
         clicks = row.get("clicks", 0)
         ctr = row.get("ctr", 0)
 
-        # GSC-only fallback: if DFS volume is 0, use GSC engagement as proxy
+        # GSC-only path: DFS volume is 0 (suppressed or unindexed)
         if volume == 0:
             if impressions > 0:
-                # Proxy score using engagement only - will rank below any keyword with volume
-                proxy_score = math.log1p(impressions) * (1 + min(ctr, 0.15)) * 0.1
+                pos_score = 1 / (1 + max(0, position - 20) * 0.1)
+                relevance = _relevance_score(query, h1)
+                ctr_boost = 1 + min(ctr, 0.15)
+
+                if restricted_industry:
+                    # Restricted industry: DFS suppresses volume by policy.
+                    # Score on GSC engagement alone, no penalty — these keywords
+                    # compete on equal footing with volume-bearing keywords.
+                    proxy_score = math.log1p(impressions) * ctr_boost * pos_score * relevance
+                    scoring_mode = "gsc_restricted"
+                else:
+                    # Standard fallback: volume just not indexed yet.
+                    # Apply 0.1 penalty so these rank below keywords with real volume.
+                    proxy_score = math.log1p(impressions) * ctr_boost * 0.1
+                    scoring_mode = "gsc_fallback"
+
                 scored.append({
                     "keyword": row.get("query"),
                     "volume": 0,
@@ -131,11 +148,11 @@ def score_keyword_pool(
                     "clicks": clicks,
                     "ctr": round(ctr * 100, 2),
                     "position": position,
-                    "position_score": 1.0,
-                    "relevance_score": _relevance_score(query, h1),
+                    "position_score": round(pos_score, 3),
+                    "relevance_score": round(relevance, 3),
                     "score": round(proxy_score, 4),
                     "source": row.get("source", "gsc"),
-                    "scoring_mode": "gsc_fallback"
+                    "scoring_mode": scoring_mode
                 })
             else:
                 skipped_volume += 1

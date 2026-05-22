@@ -123,6 +123,16 @@ with st.sidebar:
         help="Only hard-excludes keywords at this position or better. Default 1.0."
     )
     min_volume = st.number_input("Min Search Volume", value=10, step=5)
+    restricted_industry = st.toggle(
+        "Restricted Industry Mode",
+        value=False,
+        help=(
+            "Enable for industries where Google/DFS suppress keyword volume data by policy: "
+            "firearms, CBD, kratom, dispensaries, adult. "
+            "When on, zero-volume keywords with strong GSC signals (impressions, CTR, position) "
+            "score on equal footing with keywords that have DFS volume."
+        )
+    )
 
 # ── Section 1: Connect to Google Sheet ─────────────────────────────────────
 st.header("1. Connect to Google Sheet")
@@ -500,7 +510,8 @@ if st.session_state.input_df is not None:
                             min_volume=int(min_volume),
                             h1=h1,
                             max_cluster_size=int(max_cluster_size),
-                            used_primaries=used_primaries
+                            used_primaries=used_primaries,
+                            restricted_industry=restricted_industry
                         )
                         # Override primary with the forced choice
                         final_primary = forced_primary
@@ -516,7 +527,8 @@ if st.session_state.input_df is not None:
                             min_volume=int(min_volume),
                             h1=h1,
                             max_cluster_size=int(max_cluster_size),
-                            used_primaries=used_primaries
+                            used_primaries=used_primaries,
+                            restricted_industry=restricted_industry
                         )
                         if cluster["fallback_triggered"] or not cluster["primary_keyword"]:
                             results.append({
@@ -615,6 +627,7 @@ if st.session_state.input_df is not None:
                             f"diff: {final_primary_data.get('difficulty','?')} | "
                             f"source: {final_primary_data.get('source','?')}"
                         ),
+                        "_debug_restricted": restricted_industry,
                     })
 
                 except Exception as e:
@@ -677,7 +690,8 @@ if st.session_state.results_df is not None:
                 st.markdown(
                     f"GSC queries returned: **{row.get('_debug_gsc_count', '?')}** | "
                     f"DFS ranked keywords: **{row.get('_debug_dfs_count', '?')}** | "
-                    f"Pool after merge: **{row.get('_debug_pool_size', '?')}**"
+                    f"Pool after merge: **{row.get('_debug_pool_size', '?')}** | "
+                    f"Restricted industry mode: **{'on' if row.get('_debug_restricted') else 'off'}**"
                 )
 
                 # Scored pool
