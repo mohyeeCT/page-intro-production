@@ -580,6 +580,14 @@ if st.session_state.input_df is not None:
                         _source_parts.extend(s.split("+"))
                     cluster_sources = "+".join(dict.fromkeys(p for p in _source_parts if p))
 
+                    # Build full scored pool display for debug (top 10)
+                    _all_scored = cluster.get("all_scored", []) if not forced_primary else []
+                    _debug_pool = [
+                        f"{k['keyword']} | vol:{k['volume']} diff:{k['difficulty']} "
+                        f"pos:{k['position']} score:{k['score']} src:{k['source']}"
+                        for k in _all_scored[:10]
+                    ]
+
                     results.append({
                         "url": url,
                         "intro_copy": intro,
@@ -589,7 +597,24 @@ if st.session_state.input_df is not None:
                         "primary_volume": final_primary_data.get("volume", ""),
                         "primary_difficulty": final_primary_data.get("difficulty", ""),
                         "cluster_source": cluster_sources,
-                        "status": "ok"
+                        "status": "ok",
+                        # Debug fields — not written to sheet
+                        "_debug_tier": cluster_tier,
+                        "_debug_gsc_count": len(gsc_queries),
+                        "_debug_dfs_count": len(dfs_ranked),
+                        "_debug_pool_size": len(pool),
+                        "_debug_scored_pool": "\n".join(_debug_pool) if _debug_pool else "n/a",
+                        "_debug_page_context": page_context,
+                        "_debug_scrape_status": (
+                            "ok" if page_context else
+                            ("disabled" if not enable_scraping else "failed or empty")
+                        ),
+                        "_debug_primary_data": (
+                            f"keyword: {final_primary} | "
+                            f"vol: {final_primary_data.get('volume','?')} | "
+                            f"diff: {final_primary_data.get('difficulty','?')} | "
+                            f"source: {final_primary_data.get('source','?')}"
+                        ),
                     })
 
                 except Exception as e:
@@ -623,10 +648,64 @@ if st.session_state.results_df is not None:
     col_b.metric("Skipped / Error", len(skipped))
     col_c.metric("Avg Word Count", int(ok["word_count"].mean()) if len(ok) > 0 else 0)
 
-    st.dataframe(
-        results_df[["url", "primary_keyword", "primary_volume", "primary_difficulty", "supporting_keywords", "word_count", "intro_copy", "cluster_source", "status"]],
-        use_container_width=True
-    )
+    # Summary table — clean output columns only, no debug fields
+    display_cols = ["url", "primary_keyword", "primary_volume", "primary_difficulty",
+                    "supporting_keywords", "word_count", "intro_copy", "cluster_source", "status"]
+    st.dataframe(results_df[display_cols], use_container_width=True)
+
+    # Per-row debug expanders
+    st.subheader("Row Debug")
+    for _, row in results_df.iterrows():
+        row_label = row["url"][:70] + "..." if len(row["url"]) > 70 else row["url"]
+        status_icon = "✅" if row["status"] == "ok" else "❌"
+        with st.expander(f"{status_icon} {row_label}"):
+            if row["status"] != "ok":
+                st.error(f"Status: {row['status']}")
+            else:
+                # Primary keyword selection
+                st.caption("**Primary Keyword Selection**")
+                tier_labels = {
+                    "manual": "🟣 Tier 1 — Manual keyword from sheet",
+                    "h1_derived": "🔵 Tier 2 — Derived from H1",
+                    "gsc+dfs": "🟢 Tier 3 — GSC + DFS scoring"
+                }
+                tier = row.get("_debug_tier", "")
+                st.markdown(tier_labels.get(tier, f"Tier: {tier}"))
+                st.caption(row.get("_debug_primary_data", ""))
+
+                # Data sources
+                st.caption("**Data Sources**")
+                st.markdown(
+                    f"GSC queries returned: **{row.get('_debug_gsc_count', '?')}** | "
+                    f"DFS ranked keywords: **{row.get('_debug_dfs_count', '?')}** | "
+                    f"Pool after merge: **{row.get('_debug_pool_size', '?')}**"
+                )
+
+                # Scored pool
+                scored_pool = row.get("_debug_scored_pool", "")
+                if scored_pool and scored_pool != "n/a":
+                    st.caption("**Top 10 Scored Keywords** (keyword | vol | diff | pos | score | source)")
+                    st.text(scored_pool)
+                else:
+                    st.caption("Scored pool: primary was forced (manual or H1), no pool scoring run.")
+
+                # Supporting keywords
+                if row.get("supporting_keywords"):
+                    st.caption(f"**Supporting keywords sent to AI:** {row['supporting_keywords']}")
+
+                # Scrape / page context
+                st.caption("**Page Scraping**")
+                scrape_status = row.get("_debug_scrape_status", "disabled")
+                st.markdown(f"Scrape status: `{scrape_status}`")
+                page_ctx = row.get("_debug_page_context", "")
+                if page_ctx:
+                    st.text_area(
+                        f"Page content sent to AI ({len(page_ctx)} chars)",
+                        value=page_ctx,
+                        height=150,
+                        disabled=True,
+                        key=f"ctx_{row['url']}"
+                    )
 
     if len(skipped) > 0:
         with st.expander(f"Skipped / Errors ({len(skipped)})"):
