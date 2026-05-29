@@ -145,7 +145,8 @@ def _build_prompt(
     word_count: int,
     paragraph_count: int,
     page_type: str = "",
-    page_context: str = ""
+    page_context: str = "",
+    brand_guidelines: str = "",
 ) -> str:
     biz_context = BUSINESS_TYPE_CONTEXT.get(business_type, BUSINESS_TYPE_CONTEXT["general"])
     template_context = PAGE_TEMPLATE_CONTEXT.get(page_template, "")
@@ -206,6 +207,7 @@ UNIVERSAL COPY RULES
 - No marketing superlatives: avoid "best", "leading", "world-class", "cutting-edge", "top-notch".
 - Active voice. Vary sentence length.
 - {brand_instruction}
+{f"\\nBRAND & COPY GUIDELINES:\\n{brand_guidelines.strip()}" if brand_guidelines.strip() else ""}
 
 The page template rules take priority over the universal copy rules where they conflict.
 
@@ -226,7 +228,8 @@ def generate_intro(
     provider: str,
     api_key: str,
     page_context: str = "",
-    model_overrides: dict = None
+    model_overrides: dict = None,
+    brand_guidelines: str = "",
 ) -> str:
     """
     Routes copy generation to the selected AI provider.
@@ -243,7 +246,8 @@ def generate_intro(
         word_count=word_count,
         paragraph_count=paragraph_count,
         page_type=page_type,
-        page_context=page_context
+        page_context=page_context,
+        brand_guidelines=brand_guidelines,
     )
 
     raw = ""

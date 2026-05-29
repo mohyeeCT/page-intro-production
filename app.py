@@ -107,6 +107,16 @@ with st.sidebar:
         help="If the brand is an abbreviation (e.g. DSB), enter the full name. Each word is added to the branded filter."
     )
     include_brand = st.toggle("Include brand name in copy", value=False)
+
+    st.markdown("---")
+    brand_guidelines = st.text_area(
+        "Brand & Copy Guidelines (optional)",
+        placeholder="Paste brand voice, tone, target audience, USPs, key messages, words to avoid, competitor notes, or any copy guidelines here. The AI will apply this context to every intro generated in this run.",
+        height=160,
+        help="Free-form brand context injected into every prompt. Paste a brand brief, style notes, or bullet points — any format works."
+    )
+    st.markdown("---")
+
     branded_terms_input = st.text_area(
         "Additional Branded Terms to Exclude (one per line)",
         placeholder="acme\nacme inc",
@@ -581,7 +591,8 @@ if st.session_state.input_df is not None:
                         page_type=page_type,
                         provider=provider,
                         api_key=api_key,
-                        page_context=page_context
+                        page_context=page_context,
+                        brand_guidelines=brand_guidelines,
                     )
 
                     actual_word_count = len(intro.split())
