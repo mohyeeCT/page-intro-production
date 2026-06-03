@@ -7,6 +7,7 @@ from utils.gsc import get_gsc_client, get_top_queries_for_url
 from utils.dfs import get_ranked_keywords_for_url, get_keyword_volume_difficulty, merge_keyword_pools
 from utils.keyword import score_keyword_pool
 from utils.copy_gen import generate_intro
+from utils.niches import get_niche_context, NICHES
 from utils.scraper import scrape_page_context
 
 st.set_page_config(page_title="Page Intro Production", layout="wide")
@@ -115,6 +116,34 @@ with st.sidebar:
         height=160,
         help="Free-form brand context injected into every prompt. Paste a brand brief, style notes, or bullet points — any format works."
     )
+    st.markdown("---")
+    forbidden_phrases = st.text_area(
+        "Forbidden Phrases (one per line)",
+        placeholder="best in class\nworld-class\namazing",
+        height=80,
+        help="Phrases the AI must never use. Applied to every intro in this run."
+    )
+    # Niche selection
+    _niche_groups = {}
+    for _nk, _nv in NICHES.items():
+        _niche_groups.setdefault(_nv["group"], []).append((_nk, _nv["label"]))
+    _niche_options = [("none", "No specific niche")]
+    for _grp in ["B2B", "Service / Local", "Ecommerce"]:
+        for _nk, _nlabel in _niche_groups.get(_grp, []):
+            _niche_options.append((_nk, f"{_grp}: {_nlabel}"))
+    _niche_keys = [k for k, _ in _niche_options]
+    _niche_labels = [l for _, l in _niche_options]
+    _niche_idx = st.session_state.get("intro_niche_idx", 0)
+    selected_niche_idx = st.selectbox(
+        "Niche",
+        range(len(_niche_options)),
+        format_func=lambda i: _niche_labels[i],
+        index=_niche_idx,
+        key="intro_niche_select"
+    )
+    selected_niche = _niche_keys[selected_niche_idx]
+    st.session_state["intro_niche_idx"] = selected_niche_idx
+
     st.markdown("---")
 
     branded_terms_input = st.text_area(
@@ -578,6 +607,16 @@ if st.session_state.input_df is not None:
 
                     # Step 7: Generate intro copy
                     status_area.info(f"[{i+1}] Generating copy with {provider}...")
+                    # Merge niche context into brand_guidelines
+                    _niche_ctx = get_niche_context(selected_niche)
+                    _effective_guidelines = (
+                        brand_guidelines + "\n\n" + _niche_ctx
+                        if brand_guidelines.strip() and _niche_ctx
+                        else _niche_ctx or brand_guidelines
+                    )
+                    _forbidden_str = "\n".join(
+                        p.strip() for p in forbidden_phrases.strip().splitlines() if p.strip()
+                    )
                     intro = generate_intro(
                         h1=h1,
                         primary_keyword=final_primary,
@@ -592,7 +631,8 @@ if st.session_state.input_df is not None:
                         provider=provider,
                         api_key=api_key,
                         page_context=page_context,
-                        brand_guidelines=brand_guidelines,
+                        brand_guidelines=_effective_guidelines,
+                        forbidden_phrases=_forbidden_str,
                     )
 
                     actual_word_count = len(intro.split())
