@@ -55,10 +55,19 @@ with st.sidebar:
     st.divider()
     st.header("Job Config")
 
-    gsc_site_url = st.text_input(
-        "GSC Site URL",
-        help="Match exactly: sc-domain:example.com or https://example.com/"
+    use_gsc = st.toggle(
+        "Use GSC for keyword selection",
+        value=True,
+        help="When enabled, pulls top queries from GSC for keyword selection and brand detection. Disable if you are using manual keywords or H1-derived keywords only."
     )
+    gsc_site_url = ""
+    if use_gsc:
+        gsc_site_url = st.text_input(
+            "GSC Site URL",
+            help="Match exactly: sc-domain:example.com or https://example.com/"
+        )
+    else:
+        st.caption("GSC disabled. Primary keywords will come from the sheet keyword column or H1-derived phrases.")
     location_code = st.number_input("DFS Location Code", value=2840, step=1)
 
     st.divider()
@@ -226,15 +235,18 @@ if st.session_state.input_df is not None:
 
     # ── Section 3: Brand Detection ──────────────────────────────────────────
     st.header("3. Brand Detection")
-    st.caption(
-        "Auto-detect branded GSC queries using CTR, position, and domain word signals. "
-        "Detected terms merge with any manually entered terms in the sidebar."
-    )
+    if use_gsc:
+        st.caption(
+            "Auto-detect branded GSC queries using CTR, position, and domain word signals. "
+            "Detected terms merge with any manually entered terms in the sidebar."
+        )
+    else:
+        st.caption("GSC disabled. Brand auto-detection is unavailable; use manual branded terms in the sidebar if needed.")
 
-    detect_btn = st.button("Auto-detect Branded Terms")
+    detect_btn = st.button("Auto-detect Branded Terms", disabled=not use_gsc)
 
     if detect_btn:
-        if not gsc_site_url:
+        if use_gsc and not gsc_site_url:
             st.error("Enter your GSC Site URL in the sidebar first.")
         else:
             try:
@@ -328,7 +340,7 @@ if st.session_state.input_df is not None:
             errors.append("DataForSEO password is required.")
         if not dfs_login:
             errors.append("DataForSEO login is required.")
-        if not gsc_site_url:
+        if use_gsc and not gsc_site_url:
             errors.append("GSC Site URL is required.")
         if errors:
             for e in errors:
@@ -336,7 +348,7 @@ if st.session_state.input_df is not None:
         else:
             try:
                 sa_info = st.session_state.sa_info
-                gsc_client = get_gsc_client(sa_info)
+                gsc_client = get_gsc_client(sa_info) if use_gsc else None
             except Exception as e:
                 st.error(f"GSC client init failed: {e}")
                 st.stop()
@@ -400,12 +412,16 @@ if st.session_state.input_df is not None:
                     # GSC and DFS ranked keywords always feed the supporting pool regardless of tier
 
                     # Step 1: GSC pull (always runs — feeds supporting pool)
-                    status_area.info(f"[{i+1}] Pulling GSC queries...")
-                    gsc_queries = get_top_queries_for_url(gsc_client, gsc_site_url, url, top_n=10)
                     gsc_error = ""
-                    if gsc_queries and "_error" in gsc_queries[0]:
-                        gsc_error = gsc_queries[0]["_error"]
+                    if use_gsc and gsc_client:
+                        status_area.info(f"[{i+1}] Pulling GSC queries...")
+                        gsc_queries = get_top_queries_for_url(gsc_client, gsc_site_url, url, top_n=10)
+                        if gsc_queries and "_error" in gsc_queries[0]:
+                            gsc_error = gsc_queries[0]["_error"]
+                            gsc_queries = []
+                    else:
                         gsc_queries = []
+                        gsc_error = "GSC disabled"
 
                     # Step 2: DFS ranked keywords (always runs — feeds supporting pool)
                     status_area.info(f"[{i+1}] Pulling DFS ranked keywords...")
