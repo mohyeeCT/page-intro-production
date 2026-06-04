@@ -1,10 +1,16 @@
-import requests
-from requests.auth import HTTPBasicAuth
 from urllib.parse import urlparse
 
 
 def _auth(login: str, password: str):
+    from requests.auth import HTTPBasicAuth
+
     return HTTPBasicAuth(login, password)
+
+
+def _post_json(url: str, payload: list, login: str, password: str):
+    import requests
+
+    return requests.post(url, json=payload, auth=_auth(login, password), timeout=30)
 
 
 def get_keyword_volume_difficulty(
@@ -29,7 +35,7 @@ def get_keyword_volume_difficulty(
     }]
 
     try:
-        resp = requests.post(url, json=payload, auth=_auth(login, password), timeout=30)
+        resp = _post_json(url, payload, login, password)
         resp.raise_for_status()
         data = resp.json()
         result = {}
@@ -41,7 +47,20 @@ def get_keyword_volume_difficulty(
             result[kw.lower()] = {"volume": volume, "difficulty": difficulty}
         return result
     except Exception as e:
-        return {}
+        return {"_error": str(e)}
+
+
+def _relative_url_variants(relative_url: str) -> list:
+    if not relative_url:
+        relative_url = "/"
+    variants = [relative_url]
+    if relative_url == "/":
+        return variants
+    if relative_url.endswith("/"):
+        variants.append(relative_url.rstrip("/"))
+    else:
+        variants.append(relative_url + "/")
+    return list(dict.fromkeys(variants))
 
 
 def get_ranked_keywords_for_url(
@@ -68,48 +87,51 @@ def get_ranked_keywords_for_url(
         relative_url += f"?{parsed.query}"
 
     url = "https://api.dataforseo.com/v3/dataforseo_labs/google/ranked_keywords/live"
-    payload = [{
-        "target": domain,
-        "location_code": location_code,
-        "language_code": language_code,
-        "limit": limit,
-        "filters": [
-            "ranked_serp_element.serp_item.relative_url", "=", relative_url
-        ],
-        "order_by": ["keyword_data.keyword_info.search_volume,desc"]
-    }]
-
+    last_error = ""
     try:
-        resp = requests.post(url, json=payload, auth=_auth(login, password), timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        items = data.get("tasks", [{}])[0].get("result", [{}])[0].get("items", [])
+        for relative_variant in _relative_url_variants(relative_url):
+            payload = [{
+                "target": domain,
+                "location_code": location_code,
+                "language_code": language_code,
+                "limit": limit,
+                "filters": [
+                    "ranked_serp_element.serp_item.relative_url", "=", relative_variant
+                ],
+                "order_by": ["keyword_data.keyword_info.search_volume,desc"]
+            }]
+            resp = _post_json(url, payload, login, password)
+            resp.raise_for_status()
+            data = resp.json()
+            items = data.get("tasks", [{}])[0].get("result", [{}])[0].get("items", [])
 
-        results = []
-        for item in items:
-            kw_data = item.get("keyword_data", {})
-            kw = kw_data.get("keyword", "")
-            volume = kw_data.get("keyword_info", {}).get("search_volume") or 0
-            difficulty = kw_data.get("keyword_properties", {}).get("keyword_difficulty") or 50
+            results = []
+            for item in items:
+                kw_data = item.get("keyword_data", {})
+                kw = kw_data.get("keyword", "")
+                volume = kw_data.get("keyword_info", {}).get("search_volume") or 0
+                difficulty = kw_data.get("keyword_properties", {}).get("keyword_difficulty") or 50
 
-            # Extract position from the ranked_serp_element
-            serp_el = item.get("ranked_serp_element", {}).get("serp_item", {})
-            position = serp_el.get("rank_absolute") or serp_el.get("rank_group") or 50
+                serp_el = item.get("ranked_serp_element", {}).get("serp_item", {})
+                position = serp_el.get("rank_absolute") or serp_el.get("rank_group") or 50
 
-            if kw:
-                results.append({
-                    "query": kw.lower(),
-                    "volume": volume,
-                    "difficulty": difficulty,
-                    "position": float(position),
-                    "impressions": 0,
-                    "clicks": 0,
-                    "ctr": 0,
-                    "source": "dfs_ranked"
-                })
-        return results
-    except Exception as e:
+                if kw:
+                    results.append({
+                        "query": kw.lower(),
+                        "volume": volume,
+                        "difficulty": difficulty,
+                        "position": float(position),
+                        "impressions": 0,
+                        "clicks": 0,
+                        "ctr": 0,
+                        "source": "dfs_ranked"
+                    })
+            if results:
+                return results
         return []
+    except Exception as e:
+        last_error = str(e)
+    return [{"_error": last_error}]
 
 
 def merge_keyword_pools(gsc_queries: list, dfs_ranked: list, manual_seeds: list = None) -> list:
@@ -124,11 +146,15 @@ def merge_keyword_pools(gsc_queries: list, dfs_ranked: list, manual_seeds: list 
 
     # Add DFS ranked keywords first as base
     for item in dfs_ranked:
+        if "_error" in item:
+            continue
         key = item["query"].lower().strip()
         pool[key] = item.copy()
 
     # Enrich with GSC data where keywords overlap, GSC wins on engagement signals
     for item in gsc_queries:
+        if "_error" in item:
+            continue
         key = item["query"].lower().strip()
         if key in pool:
             # Keyword exists in DFS - enrich with real engagement data

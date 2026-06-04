@@ -1,9 +1,10 @@
-from googleapiclient.discovery import build
-from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta
 
 
 def get_gsc_client(service_account_info: dict):
+    from googleapiclient.discovery import build
+    from google.oauth2.service_account import Credentials
+
     scopes = ["https://www.googleapis.com/auth/webmasters.readonly"]
     creds = Credentials.from_service_account_info(service_account_info, scopes=scopes)
     return build("searchconsole", "v1", credentials=creds)
@@ -50,4 +51,4 @@ def get_top_queries_for_url(client, site_url: str, page_url: str, top_n: int = 1
             for row in rows
         ]
     except Exception as e:
-        return []
+        return [{"_error": str(e), "_site_url": site_url, "_page_url": page_url}]

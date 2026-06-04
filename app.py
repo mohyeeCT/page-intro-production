@@ -31,7 +31,7 @@ with st.sidebar:
         help="Same service account used for Google Sheets and GSC access."
     )
 
-    dfs_login = st.text_input("DataForSEO Login", value="mo@brandvoxx.com")
+    dfs_login = st.text_input("DataForSEO Login")
     dfs_password = st.text_input("DataForSEO Password", type="password")
 
     st.divider()
@@ -326,6 +326,8 @@ if st.session_state.input_df is not None:
             errors.append(f"{provider} API key is required.")
         if not dfs_password:
             errors.append("DataForSEO password is required.")
+        if not dfs_login:
+            errors.append("DataForSEO login is required.")
         if not gsc_site_url:
             errors.append("GSC Site URL is required.")
         if errors:
@@ -400,6 +402,10 @@ if st.session_state.input_df is not None:
                     # Step 1: GSC pull (always runs — feeds supporting pool)
                     status_area.info(f"[{i+1}] Pulling GSC queries...")
                     gsc_queries = get_top_queries_for_url(gsc_client, gsc_site_url, url, top_n=10)
+                    gsc_error = ""
+                    if gsc_queries and "_error" in gsc_queries[0]:
+                        gsc_error = gsc_queries[0]["_error"]
+                        gsc_queries = []
 
                     # Step 2: DFS ranked keywords (always runs — feeds supporting pool)
                     status_area.info(f"[{i+1}] Pulling DFS ranked keywords...")
@@ -407,6 +413,10 @@ if st.session_state.input_df is not None:
                         dfs_login, dfs_password, url,
                         location_code=int(location_code)
                     )
+                    dfs_ranked_error = ""
+                    if dfs_ranked and "_error" in dfs_ranked[0]:
+                        dfs_ranked_error = dfs_ranked[0]["_error"]
+                        dfs_ranked = []
 
                     # Step 3: Determine primary keyword source and enrich accordingly
                     forced_primary = None
@@ -425,6 +435,9 @@ if st.session_state.input_df is not None:
                                 dfs_login, dfs_password, all_to_enrich,
                                 location_code=int(location_code)
                             )
+                            if "_error" in enriched:
+                                st.warning(f"Row {i+1}: DFS enrichment failed ({enriched['_error']}), continuing with default keyword metrics.")
+                                enriched = {}
                         else:
                             enriched = {}
 
@@ -488,6 +501,9 @@ if st.session_state.input_df is not None:
                                 dfs_login, dfs_password, _h1_seeds,
                                 location_code=int(location_code)
                             )
+                            if "_error" in _h1_vd:
+                                st.warning(f"Row {i+1}: DFS H1 enrichment failed ({_h1_vd['_error']}), continuing with default keyword metrics.")
+                                _h1_vd = {}
                             # Pick highest-volume H1 phrase as the Tier 2 primary
                             _h1_candidates = sorted(
                                 _h1_seeds,
@@ -531,6 +547,13 @@ if st.session_state.input_df is not None:
                     status_area.info(f"[{i+1}] Scoring keyword pool...")
 
                     if not pool and not forced_primary:
+                        source_errors = " | ".join(
+                            e for e in [
+                                f"GSC error: {gsc_error}" if gsc_error else "",
+                                f"DFS ranked error: {dfs_ranked_error}" if dfs_ranked_error else "",
+                            ]
+                            if e
+                        )
                         results.append({
                             "url": url,
                             "intro_copy": "",
@@ -539,8 +562,8 @@ if st.session_state.input_df is not None:
                             "word_count": 0,
                             "primary_volume": "",
                             "primary_difficulty": "",
-                            "cluster_source": "no data",
-                            "status": "skipped: no keyword data"
+                            "cluster_source": source_errors or "no data",
+                            "status": f"skipped: no keyword data{f' ({source_errors})' if source_errors else ''}"
                         })
                         continue
 
@@ -669,6 +692,8 @@ if st.session_state.input_df is not None:
                         "_debug_tier": cluster_tier,
                         "_debug_gsc_count": len(gsc_queries),
                         "_debug_dfs_count": len(dfs_ranked),
+                        "_debug_gsc_error": gsc_error,
+                        "_debug_dfs_error": dfs_ranked_error,
                         "_debug_pool_size": len(pool),
                         "_debug_scored_pool": "\n".join(_debug_pool) if _debug_pool else "n/a",
                         "_debug_page_context": page_context,

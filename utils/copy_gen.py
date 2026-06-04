@@ -53,7 +53,7 @@ PAGE_TEMPLATE_CONTEXT = {
         "Rules:\n"
         "- Lead with the primary use case and one concrete differentiator. Not the category, not the brand story.\n"
         "- Functional language only: what it does, how it performs, who it is built for.\n"
-        "- One soft implicit CTA signal is acceptable in the closing sentence (e.g. availability, options, variants).\n"
+        "- One soft implicit CTA signal is acceptable in the closing sentence, but do not imply availability, variants, delivery, or policy details unless they are explicitly supported.\n"
         "- If page content includes specs, materials, or dimensions, reference the most relevant one specifically.\n"
         "- Do not describe the product category. Describe this specific product."
     ),
@@ -110,6 +110,26 @@ RATE_LIMITS = {
     "Mistral": 2.0,
     "Groq": 2.0,
 }
+
+UNSUPPORTED_CLAIM_GUARDRAIL = (
+    "UNSUPPORTED CLAIM RULES\n"
+    "- Do not state return, shipping, delivery, warranty, guarantee, refund, exchange, eligibility, "
+    "availability, stock, pricing, discount, certification, compliance, safety, legal, medical, or "
+    "performance claims unless explicitly present in scraped page content, brand guidelines, or supplied source data.\n"
+    "- Treat GSC, DFS, keywords, page template, and business type as strategy signals, not proof of actual policies, "
+    "inventory, prices, warranties, guarantees, or shipping terms.\n"
+    "- If a risky detail is not confirmed, avoid the claim or keep it general.\n"
+)
+
+SCRAPED_CONTEXT_GUARDRAIL = (
+    "SCRAPED CONTEXT RULES\n"
+    "- Use scraped page content as grounding context for topic, audience, product range, services, materials, "
+    "locations, and differentiators.\n"
+    "- Do not turn scraped prices, exact sizes, stock levels, product counts, variant counts, discounts, or policy "
+    "details into claims unless the user supplied them as approved brand guidance.\n"
+    "- Generalize unstable ecommerce details into durable ideas such as available styles, different use cases, "
+    "material choices, comparison factors, or shopper needs.\n"
+)
 
 
 def _sanitise(text: str, brand_name: str = "") -> str:
@@ -177,7 +197,7 @@ def _build_prompt(
     scraped_block = ""
     if page_context and page_context.strip():
         scraped_block = f"""
-PAGE CONTENT (scraped from the live page — use specific details to make the intro concrete: product types, services, materials, locations, differentiators. Do not write generic copy when this is available.)
+PAGE CONTENT (scraped from the live page - use it as grounding context, not as permission to invent or overstate risky claims.)
 ---
 {page_context.strip()}
 ---
@@ -196,6 +216,9 @@ BUSINESS TYPE RULES
 
 PAGE TEMPLATE RULES
 {template_context}
+
+{UNSUPPORTED_CLAIM_GUARDRAIL}
+{SCRAPED_CONTEXT_GUARDRAIL if scraped_block else ""}
 
 UNIVERSAL COPY RULES
 - {para_instruction}
