@@ -106,9 +106,17 @@ PAGE_TEMPLATE_CONTEXT = {
 RATE_LIMITS = {
     "Claude": 0.5,
     "OpenAI": 0.5,
-    "Gemini": 5.0,
-    "Mistral": 2.0,
-    "Groq": 2.0,
+    "Gemini (free)": 5.0,
+    "Mistral (free tier)": 2.0,
+    "Groq (free tier)": 2.0,
+}
+
+DEFAULT_MODELS = {
+    "Claude": "claude-sonnet-4-6",
+    "OpenAI": "gpt-4o-mini",
+    "Gemini (free)": "gemini-2.0-flash",
+    "Mistral (free tier)": "mistral-small-latest",
+    "Groq (free tier)": "llama3-70b-8192",
 }
 
 UNSUPPORTED_CLAIM_GUARDRAIL = (
@@ -254,7 +262,7 @@ def generate_intro(
     provider: str,
     api_key: str,
     page_context: str = "",
-    model_overrides: dict = None,
+    model: str = None,
     brand_guidelines: str = "",
     forbidden_phrases: str = "",
 ) -> str:
@@ -278,15 +286,15 @@ def generate_intro(
         forbidden_phrases=forbidden_phrases,
     )
 
+    resolved_model = model or DEFAULT_MODELS.get(provider)
     raw = ""
 
     try:
         if provider == "Claude":
             import anthropic
             client = anthropic.Anthropic(api_key=api_key)
-            model = (model_overrides or {}).get("claude", "claude-sonnet-4-6")
             msg = client.messages.create(
-                model=model,
+                model=resolved_model,
                 max_tokens=600,
                 messages=[{"role": "user", "content": prompt}]
             )
@@ -295,37 +303,33 @@ def generate_intro(
         elif provider == "OpenAI":
             from openai import OpenAI
             client = OpenAI(api_key=api_key)
-            model = (model_overrides or {}).get("openai", "gpt-4o-mini")
             resp = client.chat.completions.create(
-                model=model,
+                model=resolved_model,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=600
             )
             raw = resp.choices[0].message.content
 
-        elif provider == "Gemini":
+        elif provider == "Gemini (free)":
             from google import genai
             client = genai.Client(api_key=api_key)
-            model = (model_overrides or {}).get("gemini", "gemini-2.0-flash")
-            response = client.models.generate_content(model=model, contents=prompt)
+            response = client.models.generate_content(model=resolved_model, contents=prompt)
             raw = response.text
 
-        elif provider == "Mistral":
+        elif provider == "Mistral (free tier)":
             from mistralai.client import Mistral
             client = Mistral(api_key=api_key)
-            model = (model_overrides or {}).get("mistral", "mistral-small-latest")
             resp = client.chat.complete(
-                model=model,
+                model=resolved_model,
                 messages=[{"role": "user", "content": prompt}]
             )
             raw = resp.choices[0].message.content
 
-        elif provider == "Groq":
+        elif provider == "Groq (free tier)":
             from groq import Groq
             client = Groq(api_key=api_key)
-            model = (model_overrides or {}).get("groq", "llama3-8b-8192")
             resp = client.chat.completions.create(
-                model=model,
+                model=resolved_model,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=600
             )
