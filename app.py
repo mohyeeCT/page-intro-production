@@ -49,8 +49,60 @@ with st.sidebar:
     st.divider()
     st.header("AI Provider")
 
-    provider = st.selectbox("Provider", ["Claude", "OpenAI", "Gemini", "Mistral", "Groq"])
-    api_key = st.text_input(f"{provider} API Key", type="password")
+    provider = st.selectbox("Provider", [
+        "Claude",
+        "OpenAI",
+        "Gemini (free)",
+        "Mistral (free tier)",
+        "Groq (free tier)",
+    ])
+
+    _model_options = {
+        "Claude": [
+            "Default (claude-sonnet-4-6)",
+            "claude-opus-4-5",
+            "claude-haiku-3-5",
+        ],
+        "OpenAI": [
+            "Default (gpt-4o-mini)",
+            "gpt-4o",
+            "gpt-4-turbo",
+        ],
+        "Gemini (free)": [
+            "Default (gemini-2.0-flash)",
+            "gemini-2.0-flash-lite",
+            "gemini-1.5-pro",
+        ],
+        "Mistral (free tier)": [
+            "Default (mistral-small-latest)",
+            "mistral-medium-latest",
+            "mistral-large-latest",
+        ],
+        "Groq (free tier)": [
+            "Default (llama3-70b-8192)",
+            "llama3-8b-8192",
+            "llama-3.1-70b-versatile",
+        ],
+    }
+
+    selected_model_display = st.selectbox(
+        "AI Model Version",
+        _model_options.get(provider, ["Default"]),
+        help="Choose which model to use. 'Default' uses the recommended model for this provider."
+    )
+    if selected_model_display.startswith("Default"):
+        st.session_state["selected_model"] = None
+    else:
+        st.session_state["selected_model"] = selected_model_display
+
+    _key_labels = {
+        "Claude": "Claude API Key",
+        "OpenAI": "OpenAI API Key",
+        "Gemini (free)": "Google AI Studio API Key",
+        "Mistral (free tier)": "Mistral API Key",
+        "Groq (free tier)": "Groq API Key",
+    }
+    api_key = st.text_input(_key_labels.get(provider, f"{provider} API Key"), type="password")
 
     st.divider()
     st.header("Job Config")
@@ -670,6 +722,7 @@ if st.session_state.input_df is not None:
                         provider=provider,
                         api_key=api_key,
                         page_context=page_context,
+                        model=st.session_state.get("selected_model"),
                         brand_guidelines=_effective_guidelines,
                         forbidden_phrases=_forbidden_str,
                     )
