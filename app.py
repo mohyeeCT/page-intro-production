@@ -594,55 +594,28 @@ if st.session_state.input_df is not None:
                                 })
 
                     elif h1:
-                        # TIER 2: H1-derived phrases — enrich, use highest-volume phrase as primary
-                        status_area.info(f"[{i+1}] No manual keyword — deriving primary from H1 (Tier 2)...")
-                        _stop = {"a","an","the","and","or","for","of","in","on","at","to",
-                                 "with","by","from","as","is","are","was","were","this","that"}
-                        _h1_words = [w.lower() for w in _re.findall(r"[a-zA-Z]+", h1)
-                                     if w.lower() not in _stop and len(w) > 2]
-                        _h1_seeds = list(dict.fromkeys(
-                            [" ".join(_h1_words[j:j+2]) for j in range(len(_h1_words) - 1)] +
-                            _h1_words
-                        ))[:6]
+                        # TIER 2: Use full H1 as primary keyword (strip leading articles only)
+                        status_area.info(f"[{i+1}] No manual keyword — using H1 as primary keyword (Tier 2)...")
+                        _h1_clean = _re.sub(
+                            r"^(the|a|an|this|our)\s+", "", h1.strip(), flags=_re.IGNORECASE
+                        ).strip().lower()
 
-                        if _h1_seeds:
+                        if _h1_clean:
                             _h1_vd = get_keyword_volume_difficulty(
-                                dfs_login, dfs_password, _h1_seeds,
+                                dfs_login, dfs_password, [_h1_clean],
                                 location_code=int(location_code)
                             )
                             if "_error" in _h1_vd:
                                 st.warning(f"Row {i+1}: DFS H1 enrichment failed ({_h1_vd['_error']}), continuing with default keyword metrics.")
                                 _h1_vd = {}
-                            # Pick highest-volume H1 phrase as the Tier 2 primary
-                            _h1_candidates = sorted(
-                                _h1_seeds,
-                                key=lambda s: _h1_vd.get(s.lower(), {}).get("volume", 0),
-                                reverse=True
-                            )
-                            _best_h1 = _h1_candidates[0]
-                            _best_vd = _h1_vd.get(_best_h1.lower(), {})
-                            forced_primary = _best_h1
+                            _best_vd = _h1_vd.get(_h1_clean, {})
+                            forced_primary = _h1_clean
                             forced_primary_data = {
-                                "keyword": _best_h1,
+                                "keyword": _h1_clean,
                                 "volume": _best_vd.get("volume", 0),
                                 "difficulty": _best_vd.get("difficulty", 50),
                                 "source": "h1_derived"
                             }
-                            # Add remaining H1 phrases to DFS ranked pool as supporting candidates
-                            _dfs_map = {item["query"].lower() for item in dfs_ranked}
-                            for _s in _h1_candidates[1:]:
-                                if _s.lower() not in _dfs_map:
-                                    _vd = _h1_vd.get(_s.lower(), {})
-                                    dfs_ranked.append({
-                                        "query": _s,
-                                        "volume": _vd.get("volume", 0),
-                                        "difficulty": _vd.get("difficulty", 50),
-                                        "position": 50,
-                                        "impressions": 0,
-                                        "clicks": 0,
-                                        "ctr": 0,
-                                        "source": "h1_derived"
-                                    })
 
                     # Step 4: Merge GSC + DFS ranked into supporting pool
                     # When a forced_primary exists, it is excluded from the pool
