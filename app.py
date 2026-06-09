@@ -102,7 +102,18 @@ with st.sidebar:
         "Mistral (free tier)": "Mistral API Key",
         "Groq (free tier)": "Groq API Key",
     }
-    api_key = st.text_input(_key_labels.get(provider, f"{provider} API Key"), type="password")
+    _key_links = {
+        "Claude": "Get key: console.anthropic.com",
+        "OpenAI": "Get key: platform.openai.com/api-keys",
+        "Gemini (free)": "Get key: aistudio.google.com/app/apikey",
+        "Mistral (free tier)": "Get key: console.mistral.ai/api-keys",
+        "Groq (free tier)": "Get key: console.groq.com/keys",
+    }
+    api_key = st.text_input(
+        _key_labels.get(provider, f"{provider} API Key"),
+        type="password",
+        help=_key_links.get(provider, "")
+    )
 
     st.divider()
     st.header("Job Config")
@@ -295,7 +306,10 @@ if st.session_state.input_df is not None:
     else:
         st.caption("GSC disabled. Brand auto-detection is unavailable; use manual branded terms in the sidebar if needed.")
 
-    detect_btn = st.button("Auto-detect Branded Terms", disabled=not use_gsc)
+    _detect_ready = use_gsc and bool(gsc_site_url)
+    if use_gsc and not gsc_site_url:
+        st.caption("Enter a GSC Site URL above to enable auto-detection.")
+    detect_btn = st.button("Auto-detect Branded Terms", disabled=not _detect_ready)
 
     if detect_btn:
         if use_gsc and not gsc_site_url:
