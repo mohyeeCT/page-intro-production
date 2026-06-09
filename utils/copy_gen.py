@@ -40,7 +40,8 @@ PAGE_TEMPLATE_CONTEXT = {
         "PAGE TEMPLATE: Ecommerce Category\n"
         "Reader mindset: early-stage browsing, not yet ready to buy. They want orientation, not a sales pitch.\n"
         "Rules:\n"
-        "- Lead with what the collection contains and who it is for. Write about the range, not a single product.\n"
+        "- Open by drawing the reader into the range. Use a phrase like 'Explore our...', 'Discover...', 'Shop...' or simply start with a benefit or use case. Do not open with 'This collection is', 'This category is', or any variant of that pattern.\n"
+        "- Write about the range and who it is for. Do not focus on a single product.\n"
         "- Reference product types, materials, use cases, or brands from the page content if available.\n"
         "- Breadth over depth. The reader is exploring options, not comparing specs.\n"
         "- No hard CTA. No 'buy now', 'shop now', 'order today', or urgency language of any kind.\n"
@@ -236,7 +237,7 @@ UNIVERSAL COPY RULES
 - Never produce a keyword list, bullet list, or heading inside the copy.
 - This intro follows directly from the H1. Do not repeat the H1 verbatim.
 - No em dashes anywhere. Use commas or short sentences instead.
-- Never start with: "Welcome to", "In today's", "Are you looking for", "If you're", "Whether you're".
+- Never start with: "Welcome to", "In today's", "Are you looking for", "If you're", "Whether you're", "This collection", "This category", "This range".
 - No marketing superlatives: avoid "best", "leading", "world-class", "cutting-edge", "top-notch".
 - Active voice. Vary sentence length.
 - {brand_instruction}
