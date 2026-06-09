@@ -382,7 +382,16 @@ if st.session_state.input_df is not None:
 
     # ── Section 4: Run ──────────────────────────────────────────────────────
     st.header("4. Run")
-    run_btn = st.button("Generate Intros", type="primary")
+    _missing = []
+    if not api_key:
+        _missing.append(f"{provider} API key")
+    if not dfs_login:
+        _missing.append("DataForSEO login")
+    if not dfs_password:
+        _missing.append("DataForSEO password")
+    if _missing:
+        st.warning(f"Complete credentials before running: {', '.join(_missing)}.")
+    run_btn = st.button("Generate Intros", type="primary", disabled=bool(_missing))
 
     if run_btn:
         errors = []
@@ -423,6 +432,8 @@ if st.session_state.input_df is not None:
                     w.lower() for w in full_brand_name.split() if len(w) > 2
                 ])
             branded_terms = list(set(branded_terms))
+            if branded_terms:
+                st.info(f"Branded filter active: {', '.join(sorted(branded_terms))}")
 
             results = []
             used_primaries = set()  # tracks assigned primary keywords across all rows
@@ -440,22 +451,25 @@ if st.session_state.input_df is not None:
                 pct = int((i / len(df)) * 100)
                 progress.progress(pct, text=f"Processing {i + 1}/{len(df)}: {url[:60]}")
 
-                if not url or url.lower() == "nan":
+                if not url or url.lower() == "nan" or not url.startswith("http"):
                     results.append({
                         "url": url,
                         "intro_copy": "",
                         "primary_keyword": "",
+                        "runner_up": "",
                         "supporting_keywords": "",
                         "word_count": 0,
                         "primary_volume": "",
                         "primary_difficulty": "",
                         "cluster_source": "",
-                        "status": "skipped: no URL"
+                        "scrape_status": "skipped",
+                        "status": "skipped: invalid URL"
                     })
                     continue
 
                 try:
                     import re as _re
+                    scrape_status = "disabled"  # updated in step 6 if scraping runs
 
                     # ── Priority chain for primary keyword selection ───────────────
                     # Tier 1: Manual keyword from sheet — hard override, always primary
@@ -626,11 +640,13 @@ if st.session_state.input_df is not None:
                             "url": url,
                             "intro_copy": "",
                             "primary_keyword": "",
+                            "runner_up": "",
                             "supporting_keywords": "",
                             "word_count": 0,
                             "primary_volume": "",
                             "primary_difficulty": "",
                             "cluster_source": source_errors or "no data",
+                            "scrape_status": scrape_status,
                             "status": f"skipped: no keyword data{f' ({source_errors})' if source_errors else ''}"
                         })
                         continue
@@ -669,11 +685,13 @@ if st.session_state.input_df is not None:
                                 "url": url,
                                 "intro_copy": "",
                                 "primary_keyword": "",
+                                "runner_up": "",
                                 "supporting_keywords": "",
                                 "word_count": 0,
                                 "primary_volume": "",
                                 "primary_difficulty": "",
                                 "cluster_source": "no scoreable keywords",
+                                "scrape_status": scrape_status,
                                 "status": "skipped: no scoreable keywords"
                             })
                             continue
@@ -697,7 +715,10 @@ if st.session_state.input_df is not None:
                         scrape_result = scrape_page_context(jina_key, url, max_chars=10000, mode=scrape_mode)
                         if scrape_result["success"]:
                             page_context = scrape_result["content"]
+                            scrape_label = "ecommerce collection" if scrape_mode == "ecommerce_collection" else "default"
+                            scrape_status = f"ok {scrape_label} ({len(page_context)} chars)"
                         else:
+                            scrape_status = f"failed: {scrape_result['error'][:60]}"
                             # Non-fatal — log and continue without context
                             st.warning(f"Row {i+1}: scrape failed ({scrape_result['error']}), continuing without page context.")
 
@@ -752,15 +773,18 @@ if st.session_state.input_df is not None:
                         for k in _all_scored[:10]
                     ]
 
+                    runner_up = final_supporting[0] if final_supporting else ""
                     results.append({
                         "url": url,
                         "intro_copy": intro,
                         "primary_keyword": final_primary,
+                        "runner_up": runner_up,
                         "supporting_keywords": ", ".join(final_supporting),
                         "word_count": actual_word_count,
                         "primary_volume": final_primary_data.get("volume", ""),
                         "primary_difficulty": final_primary_data.get("difficulty", ""),
                         "cluster_source": cluster_sources,
+                        "scrape_status": scrape_status,
                         "status": "ok",
                         # Debug fields — not written to sheet
                         "_debug_tier": cluster_tier,
@@ -771,10 +795,7 @@ if st.session_state.input_df is not None:
                         "_debug_pool_size": len(pool),
                         "_debug_scored_pool": "\n".join(_debug_pool) if _debug_pool else "n/a",
                         "_debug_page_context": page_context,
-                        "_debug_scrape_status": (
-                            "ok" if page_context else
-                            ("disabled" if not enable_scraping else "failed or empty")
-                        ),
+                        "_debug_scrape_status": scrape_status,
                         "_debug_primary_data": (
                             f"keyword: {final_primary} | "
                             f"vol: {final_primary_data.get('volume','?')} | "
@@ -789,11 +810,13 @@ if st.session_state.input_df is not None:
                         "url": url,
                         "intro_copy": "",
                         "primary_keyword": "",
+                        "runner_up": "",
                         "supporting_keywords": "",
                         "word_count": 0,
                         "primary_volume": "",
                         "primary_difficulty": "",
                         "cluster_source": "",
+                        "scrape_status": scrape_status,
                         "status": f"error: {e}"
                     })
 
@@ -816,8 +839,8 @@ if st.session_state.results_df is not None:
     col_c.metric("Avg Word Count", int(ok["word_count"].mean()) if len(ok) > 0 else 0)
 
     # Summary table — clean output columns only, no debug fields
-    display_cols = ["url", "primary_keyword", "primary_volume", "primary_difficulty",
-                    "supporting_keywords", "word_count", "intro_copy", "cluster_source", "status"]
+    display_cols = ["url", "primary_keyword", "runner_up", "primary_volume", "primary_difficulty",
+                    "supporting_keywords", "word_count", "scrape_status", "intro_copy", "cluster_source", "status"]
     st.dataframe(results_df[display_cols], use_container_width=True)
 
     # Per-row debug expanders
@@ -878,7 +901,7 @@ if st.session_state.results_df is not None:
         with st.expander(f"Skipped / Errors ({len(skipped)})"):
             st.dataframe(skipped[["url", "status"]], use_container_width=True)
 
-    col_dl, col_wb = st.columns(2)
+    col_dl, col_xl, col_wb = st.columns(3)
 
     with col_dl:
         csv = results_df.to_csv(index=False).encode("utf-8")
@@ -887,6 +910,18 @@ if st.session_state.results_df is not None:
             data=csv,
             file_name="page_intro_results.csv",
             mime="text/csv"
+        )
+
+    with col_xl:
+        import io as _io
+        _export_cols = [c for c in display_cols if c in results_df.columns]
+        _xl_buf = _io.BytesIO()
+        results_df[_export_cols].to_excel(_xl_buf, index=False, engine="openpyxl")
+        st.download_button(
+            "Download Excel",
+            data=_xl_buf.getvalue(),
+            file_name="page_intro_results.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
     with col_wb:
@@ -902,10 +937,12 @@ if st.session_state.results_df is not None:
                         result_col_map={
                             "intro_copy": "Intro Copy",
                             "primary_keyword": "Primary Keyword",
+                            "runner_up": "Runner-Up Keyword",
                             "primary_volume": "Primary KW Volume",
                             "primary_difficulty": "Primary KW Difficulty",
                             "supporting_keywords": "Supporting Keywords",
                             "word_count": "Word Count",
+                            "scrape_status": "Page Scrape Status",
                             "cluster_source": "Cluster Source",
                             "status": "Intro Status"
                         }
