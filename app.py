@@ -8,7 +8,7 @@ from utils.dfs import get_ranked_keywords_for_url, get_keyword_volume_difficulty
 from utils.keyword import score_keyword_pool
 from utils.copy_gen import generate_intro
 from utils.niches import get_niche_context, NICHES
-from utils.scraper import scrape_page_context
+from utils.scraper import scrape_page_context, is_ecommerce_collection_page
 
 st.set_page_config(page_title="Page Intro Production", layout="wide")
 st.title("Page Intro Production")
@@ -689,7 +689,12 @@ if st.session_state.input_df is not None:
                     page_context = ""
                     if enable_scraping:
                         status_area.info(f"[{i+1}] Scraping page content...")
-                        scrape_result = scrape_page_context(jina_key, url, max_chars=8000)
+                        scrape_mode = (
+                            "ecommerce_collection"
+                            if is_ecommerce_collection_page(business_type, page_type)
+                            else "default"
+                        )
+                        scrape_result = scrape_page_context(jina_key, url, max_chars=10000, mode=scrape_mode)
                         if scrape_result["success"]:
                             page_context = scrape_result["content"]
                         else:
