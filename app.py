@@ -42,7 +42,7 @@ with st.sidebar:
     )
     enable_scraping = st.toggle(
         "Enable page scraping",
-        value=False,
+        value=True,
         help="Scrapes each page via Jina Reader and passes the content to the AI to ground copy in actual page detail."
     )
 
@@ -440,6 +440,18 @@ if st.session_state.input_df is not None:
             df = st.session_state.input_df.copy()
             progress = st.progress(0, text="Starting...")
             status_area = st.empty()
+            partial_placeholder = st.empty()
+
+            def _show_partial(res_list):
+                if not res_list:
+                    return
+                import pandas as _pd
+                _partial = _pd.DataFrame(res_list)
+                _cols = [c for c in ["url", "primary_keyword", "scrape_status", "word_count", "status"]
+                         if c in _partial.columns]
+                with partial_placeholder.container():
+                    st.caption(f"Partial results — {len(res_list)} row(s) completed so far")
+                    st.dataframe(_partial[_cols], use_container_width=True)
 
             for i, row in df.iterrows():
                 url = str(row[url_col]).strip()
@@ -465,6 +477,7 @@ if st.session_state.input_df is not None:
                         "scrape_status": "skipped",
                         "status": "skipped: invalid URL"
                     })
+                    _show_partial(results)
                     continue
 
                 try:
@@ -649,6 +662,7 @@ if st.session_state.input_df is not None:
                             "scrape_status": scrape_status,
                             "status": f"skipped: no keyword data{f' ({source_errors})' if source_errors else ''}"
                         })
+                        _show_partial(results)
                         continue
 
                     if forced_primary:
@@ -694,6 +708,7 @@ if st.session_state.input_df is not None:
                                 "scrape_status": scrape_status,
                                 "status": "skipped: no scoreable keywords"
                             })
+                            _show_partial(results)
                             continue
                         final_primary = cluster["primary_keyword"]
                         final_primary_data = cluster["primary_data"] or {}
@@ -804,6 +819,7 @@ if st.session_state.input_df is not None:
                         ),
                         "_debug_restricted": restricted_industry,
                     })
+                    _show_partial(results)
 
                 except Exception as e:
                     results.append({
@@ -819,9 +835,11 @@ if st.session_state.input_df is not None:
                         "scrape_status": scrape_status,
                         "status": f"error: {e}"
                     })
+                    _show_partial(results)
 
             progress.progress(100, text="Done.")
             status_area.empty()
+            partial_placeholder.empty()
             st.session_state.results_df = pd.DataFrame(results)
 
 # ── Results (outside run block so buttons survive reruns) ───────────────────
