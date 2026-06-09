@@ -40,7 +40,7 @@ PAGE_TEMPLATE_CONTEXT = {
         "PAGE TEMPLATE: Ecommerce Category\n"
         "Reader mindset: early-stage browsing, not yet ready to buy. They want orientation, not a sales pitch.\n"
         "Rules:\n"
-        "- Open by drawing the reader into the range. Use a phrase like 'Explore our...', 'Discover...', 'Shop...' or simply start with a benefit or use case. Do not open with 'This collection is', 'This category is', or any variant of that pattern.\n"
+        "- Open by drawing the reader into the range naturally. Lead with a benefit, a use case, or the type of products available. Do not open with 'This collection is', 'This category is', or any variant of that pattern. Vary your opening — do not default to the same word or phrase every time; the right opening depends on what the page content emphasises.\n"
         "- Write about the range and who it is for. Do not focus on a single product.\n"
         "- Reference product types, materials, use cases, or brands from the page content if available.\n"
         "- Breadth over depth. The reader is exploring options, not comparing specs.\n"
