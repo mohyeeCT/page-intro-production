@@ -39,11 +39,12 @@ def get_keyword_volume_difficulty(
         resp.raise_for_status()
         data = resp.json()
         result = {}
-        items = data.get("tasks", [{}])[0].get("result", [{}])[0].get("items", [])
+        items = data.get("tasks", [{}])[0].get("result", [{}])[0].get("items") or []
         for item in items:
             kw = item.get("keyword", "")
             volume = item.get("keyword_info", {}).get("search_volume") or 0
-            difficulty = item.get("keyword_properties", {}).get("keyword_difficulty") or 50
+            kd = item.get("keyword_properties", {}).get("keyword_difficulty")
+            difficulty = kd if kd is not None else 50
             result[kw.lower()] = {"volume": volume, "difficulty": difficulty}
         return result
     except Exception as e:
@@ -103,14 +104,15 @@ def get_ranked_keywords_for_url(
             resp = _post_json(url, payload, login, password)
             resp.raise_for_status()
             data = resp.json()
-            items = data.get("tasks", [{}])[0].get("result", [{}])[0].get("items", [])
+            items = data.get("tasks", [{}])[0].get("result", [{}])[0].get("items") or []
 
             results = []
             for item in items:
                 kw_data = item.get("keyword_data", {})
                 kw = kw_data.get("keyword", "")
                 volume = kw_data.get("keyword_info", {}).get("search_volume") or 0
-                difficulty = kw_data.get("keyword_properties", {}).get("keyword_difficulty") or 50
+                kd = kw_data.get("keyword_properties", {}).get("keyword_difficulty")
+                difficulty = kd if kd is not None else 50
 
                 serp_el = item.get("ranked_serp_element", {}).get("serp_item", {})
                 position = serp_el.get("rank_absolute") or serp_el.get("rank_group") or 50
