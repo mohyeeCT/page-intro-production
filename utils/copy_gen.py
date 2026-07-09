@@ -114,7 +114,7 @@ RATE_LIMITS = {
 
 DEFAULT_MODELS = {
     "Claude": "claude-sonnet-4-6",
-    "OpenAI": "gpt-4o-mini",
+    "OpenAI": "gpt-5.5",
     "Gemini (free)": "gemini-2.0-flash",
     "Mistral (free tier)": "mistral-small-latest",
     "Groq (free tier)": "llama3-70b-8192",
@@ -189,6 +189,11 @@ def _build_prompt(
         else "Do not include any brand name in the copy."
     )
     forbidden_line = f"- Never use these phrases: {forbidden_phrases}" if forbidden_phrases.strip() else ""
+    brand_guidelines_block = (
+        f"\nBRAND & COPY GUIDELINES:\n{brand_guidelines.strip()}"
+        if brand_guidelines.strip()
+        else ""
+    )
     para_instruction = (
         "Write exactly 1 paragraph."
         if paragraph_count == 1
@@ -242,7 +247,7 @@ UNIVERSAL COPY RULES
 - Active voice. Vary sentence length.
 - {brand_instruction}
 {forbidden_line}
-{f"\\nBRAND & COPY GUIDELINES:\\n{brand_guidelines.strip()}" if brand_guidelines.strip() else ""}
+{brand_guidelines_block}
 
 The page template rules take priority over the universal copy rules where they conflict.
 

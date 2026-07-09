@@ -6,7 +6,7 @@ from utils.sheets import get_gspread_client, load_sheet, write_results_batch
 from utils.gsc import get_gsc_client, get_top_queries_for_url
 from utils.dfs import get_ranked_keywords_for_url, get_keyword_volume_difficulty, merge_keyword_pools
 from utils.keyword import score_keyword_pool
-from utils.copy_gen import generate_intro
+from utils.copy_gen import generate_intro, DEFAULT_MODELS
 from utils.niches import get_niche_context, NICHES
 from utils.scraper import scrape_page_context, is_ecommerce_collection_page
 
@@ -59,27 +59,27 @@ with st.sidebar:
 
     _model_options = {
         "Claude": [
-            "Default (claude-sonnet-4-6)",
+            f'Default ({DEFAULT_MODELS["Claude"]})',
             "claude-opus-4-5",
             "claude-haiku-3-5",
         ],
         "OpenAI": [
-            "Default (gpt-4o-mini)",
+            f'Default ({DEFAULT_MODELS["OpenAI"]})',
             "gpt-4o",
             "gpt-4-turbo",
         ],
         "Gemini (free)": [
-            "Default (gemini-2.0-flash)",
+            f'Default ({DEFAULT_MODELS["Gemini (free)"]})',
             "gemini-2.0-flash-lite",
             "gemini-1.5-pro",
         ],
         "Mistral (free tier)": [
-            "Default (mistral-small-latest)",
+            f'Default ({DEFAULT_MODELS["Mistral (free tier)"]})',
             "mistral-medium-latest",
             "mistral-large-latest",
         ],
         "Groq (free tier)": [
-            "Default (llama3-70b-8192)",
+            f'Default ({DEFAULT_MODELS["Groq (free tier)"]})',
             "llama3-8b-8192",
             "llama-3.1-70b-versatile",
         ],

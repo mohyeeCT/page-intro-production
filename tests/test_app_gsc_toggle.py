@@ -11,6 +11,12 @@ class IntroGscToggleTests(unittest.TestCase):
         self.assertIn("gsc_client = get_gsc_client(sa_info) if use_gsc else None", source)
         self.assertIn("if use_gsc and gsc_client:", source)
 
+    def test_app_displays_shared_model_defaults(self):
+        source = Path("app.py").read_text(encoding="utf-8")
+
+        self.assertIn("from utils.copy_gen import generate_intro, DEFAULT_MODELS", source)
+        self.assertIn('DEFAULT_MODELS["OpenAI"]', source)
+
 
 if __name__ == "__main__":
     unittest.main()

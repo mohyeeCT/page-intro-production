@@ -139,8 +139,8 @@ def score_keyword_pool(
                     scoring_mode = "gsc_restricted"
                 else:
                     # Standard fallback: volume just not indexed yet.
-                    # Apply 0.1 penalty so these rank below keywords with real volume.
-                    proxy_score = math.log1p(impressions) * ctr_boost * 0.1
+                    # Apply 0.1 penalty while still respecting position and H1 relevance.
+                    proxy_score = math.log1p(impressions) * ctr_boost * pos_score * relevance * 0.1
                     scoring_mode = "gsc_fallback"
 
                 scored.append({
