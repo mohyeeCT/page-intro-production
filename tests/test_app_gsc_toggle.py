@@ -30,6 +30,16 @@ class IntroGscToggleTests(unittest.TestCase):
         self.assertNotIn("gpt-5.4-mini", source)
         self.assertNotIn("gpt-5.4-nano", source)
 
+    def test_app_wires_intro_qa_flags_to_results_and_sheet_output(self):
+        source = Path("app.py").read_text(encoding="utf-8")
+
+        self.assertIn("from utils.intro_qa import", source)
+        self.assertIn("build_intro_qa_flags", source)
+        self.assertIn('"qa_flags"', source)
+        self.assertIn('"Intro QA Flags"', source)
+        self.assertIn("previous_openings", source)
+        self.assertIn("previous_category_openings", source)
+
 
 if __name__ == "__main__":
     unittest.main()
