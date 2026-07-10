@@ -108,16 +108,12 @@ RATE_LIMITS = {
     "Claude": 0.5,
     "OpenAI": 0.5,
     "Gemini (free)": 5.0,
-    "Mistral (free tier)": 2.0,
-    "Groq (free tier)": 2.0,
 }
 
 DEFAULT_MODELS = {
-    "Claude": "claude-sonnet-4-6",
+    "Claude": "claude-sonnet-5",
     "OpenAI": "gpt-5.5",
-    "Gemini (free)": "gemini-2.0-flash",
-    "Mistral (free tier)": "mistral-small-latest",
-    "Groq (free tier)": "llama3-70b-8192",
+    "Gemini (free)": "gemini-3.5-flash",
 }
 
 UNSUPPORTED_CLAIM_GUARDRAIL = (
@@ -254,6 +250,27 @@ The page template rules take priority over the universal copy rules where they c
 Return only the intro copy. No preamble, no explanation, no markdown."""
 
 
+def _extract_anthropic_text(content) -> str:
+    text = "\n".join(
+        str(block.text)
+        for block in (content or [])
+        if getattr(block, "type", "text") == "text" and getattr(block, "text", None)
+    ).strip()
+    if not text:
+        raise RuntimeError("AI provider returned an empty text response")
+    return text
+
+
+def _anthropic_request_options(model: str, max_tokens: int) -> dict:
+    return {"model": model, "max_tokens": max_tokens}
+
+
+def _openai_token_limit(model: str, max_tokens: int) -> dict:
+    if (model or "").startswith("gpt-5"):
+        return {"max_completion_tokens": max_tokens}
+    return {"max_tokens": max_tokens}
+
+
 def generate_intro(
     h1: str,
     primary_keyword: str,
@@ -300,11 +317,10 @@ def generate_intro(
             import anthropic
             client = anthropic.Anthropic(api_key=api_key)
             msg = client.messages.create(
-                model=resolved_model,
-                max_tokens=600,
+                **_anthropic_request_options(resolved_model, 600),
                 messages=[{"role": "user", "content": prompt}]
             )
-            raw = msg.content[0].text
+            raw = _extract_anthropic_text(msg.content)
 
         elif provider == "OpenAI":
             from openai import OpenAI
@@ -312,7 +328,7 @@ def generate_intro(
             resp = client.chat.completions.create(
                 model=resolved_model,
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=600
+                **_openai_token_limit(resolved_model, 600)
             )
             raw = resp.choices[0].message.content
 
@@ -321,25 +337,6 @@ def generate_intro(
             client = genai.Client(api_key=api_key)
             response = client.models.generate_content(model=resolved_model, contents=prompt)
             raw = response.text
-
-        elif provider == "Mistral (free tier)":
-            from mistralai.client import Mistral
-            client = Mistral(api_key=api_key)
-            resp = client.chat.complete(
-                model=resolved_model,
-                messages=[{"role": "user", "content": prompt}]
-            )
-            raw = resp.choices[0].message.content
-
-        elif provider == "Groq (free tier)":
-            from groq import Groq
-            client = Groq(api_key=api_key)
-            resp = client.chat.completions.create(
-                model=resolved_model,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=600
-            )
-            raw = resp.choices[0].message.content
 
         else:
             raise ValueError(f"Unknown provider: {provider}")
