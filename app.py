@@ -53,61 +53,46 @@ with st.sidebar:
         "Claude",
         "OpenAI",
         "Gemini (free)",
-        "Mistral (free tier)",
-        "Groq (free tier)",
     ])
 
     _model_options = {
         "Claude": [
-            f'Default ({DEFAULT_MODELS["Claude"]})',
-            "claude-opus-4-5",
-            "claude-haiku-3-5",
+            ("Claude Sonnet 5 (default)", DEFAULT_MODELS["Claude"]),
+            ("Claude Sonnet 4.6", "claude-sonnet-4-6"),
+            ("Claude Haiku 4.5", "claude-haiku-4-5-20251001"),
         ],
         "OpenAI": [
-            f'Default ({DEFAULT_MODELS["OpenAI"]})',
-            "gpt-4o",
-            "gpt-4-turbo",
+            ("GPT-5.5 (latest)", DEFAULT_MODELS["OpenAI"]),
+            ("GPT-5.4", "gpt-5.4"),
         ],
         "Gemini (free)": [
-            f'Default ({DEFAULT_MODELS["Gemini (free)"]})',
-            "gemini-2.0-flash-lite",
-            "gemini-1.5-pro",
-        ],
-        "Mistral (free tier)": [
-            f'Default ({DEFAULT_MODELS["Mistral (free tier)"]})',
-            "mistral-medium-latest",
-            "mistral-large-latest",
-        ],
-        "Groq (free tier)": [
-            f'Default ({DEFAULT_MODELS["Groq (free tier)"]})',
-            "llama3-8b-8192",
-            "llama-3.1-70b-versatile",
+            ("Gemini 3.5 Flash", DEFAULT_MODELS["Gemini (free)"]),
         ],
     }
 
-    selected_model_display = st.selectbox(
+    _model_options_for_provider = _model_options.get(provider, [("Default", "")])
+    _model_labels = [label for label, _ in _model_options_for_provider]
+    _model_values = [value for _, value in _model_options_for_provider]
+    _model_idx = st.selectbox(
         "AI Model Version",
-        _model_options.get(provider, ["Default"]),
-        help="Choose which model to use. 'Default' uses the recommended model for this provider."
+        range(len(_model_options_for_provider)),
+        format_func=lambda i: _model_labels[i],
+        help=(
+            "Approved IDs: claude-sonnet-5, claude-sonnet-4-6, "
+            "claude-haiku-4-5-20251001, gpt-5.5, gpt-5.4, gemini-3.5-flash."
+        )
     )
-    if selected_model_display.startswith("Default"):
-        st.session_state["selected_model"] = None
-    else:
-        st.session_state["selected_model"] = selected_model_display
+    st.session_state["selected_model"] = _model_values[_model_idx] or None
 
     _key_labels = {
         "Claude": "Claude API Key",
         "OpenAI": "OpenAI API Key",
         "Gemini (free)": "Google AI Studio API Key",
-        "Mistral (free tier)": "Mistral API Key",
-        "Groq (free tier)": "Groq API Key",
     }
     _key_links = {
         "Claude": "Get key: console.anthropic.com",
         "OpenAI": "Get key: platform.openai.com/api-keys",
         "Gemini (free)": "Get key: aistudio.google.com/app/apikey",
-        "Mistral (free tier)": "Get key: console.mistral.ai/api-keys",
-        "Groq (free tier)": "Get key: console.groq.com/keys",
     }
     api_key = st.text_input(
         _key_labels.get(provider, f"{provider} API Key"),
