@@ -7,6 +7,7 @@ from utils.gsc import get_gsc_client, get_top_queries_for_url
 from utils.dfs import get_ranked_keywords_for_url, get_keyword_volume_difficulty, merge_keyword_pools
 from utils.keyword import score_keyword_pool
 from utils.copy_gen import generate_intro, DEFAULT_MODELS
+from utils.intro_qa import build_intro_qa_flags, intro_opening_signature
 from utils.niches import get_niche_context, NICHES
 from utils.scraper import scrape_page_context, is_ecommerce_collection_page
 
@@ -436,6 +437,8 @@ if st.session_state.input_df is not None:
 
             results = []
             used_primaries = set()  # tracks assigned primary keywords across all rows
+            previous_openings = set()
+            previous_category_openings = set()
             df = st.session_state.input_df.copy()
             progress = st.progress(0, text="Starting...")
             status_area = st.empty()
@@ -446,7 +449,7 @@ if st.session_state.input_df is not None:
                     return
                 import pandas as _pd
                 _partial = _pd.DataFrame(res_list)
-                _cols = [c for c in ["url", "primary_keyword", "scrape_status", "word_count", "status"]
+                _cols = [c for c in ["url", "primary_keyword", "scrape_status", "word_count", "qa_flags", "status"]
                          if c in _partial.columns]
                 with partial_placeholder.container():
                     st.caption(f"Partial results — {len(res_list)} row(s) completed so far")
@@ -474,6 +477,7 @@ if st.session_state.input_df is not None:
                         "primary_difficulty": "",
                         "cluster_source": "",
                         "scrape_status": "skipped",
+                        "qa_flags": "not run",
                         "status": "skipped: invalid URL"
                     })
                     _show_partial(results)
@@ -632,6 +636,7 @@ if st.session_state.input_df is not None:
                             "primary_difficulty": "",
                             "cluster_source": source_errors or "no data",
                             "scrape_status": scrape_status,
+                            "qa_flags": "not run",
                             "status": f"skipped: no keyword data{f' ({source_errors})' if source_errors else ''}"
                         })
                         _show_partial(results)
@@ -678,6 +683,7 @@ if st.session_state.input_df is not None:
                                 "primary_difficulty": "",
                                 "cluster_source": "no scoreable keywords",
                                 "scrape_status": scrape_status,
+                                "qa_flags": "not run",
                                 "status": "skipped: no scoreable keywords"
                             })
                             _show_partial(results)
@@ -741,6 +747,24 @@ if st.session_state.input_df is not None:
                     )
 
                     actual_word_count = len(intro.split())
+                    qa_flags = build_intro_qa_flags(
+                        intro_copy=intro,
+                        page_template=page_template,
+                        primary_keyword=final_primary,
+                        h1=h1,
+                        page_type=page_type,
+                        previous_openings=previous_openings,
+                        previous_category_openings=previous_category_openings,
+                    )
+
+                    opening_signature = intro_opening_signature(intro)
+                    if opening_signature:
+                        previous_openings.add(opening_signature)
+                    if page_template == "category":
+                        category_signature = intro_opening_signature(intro, words=4)
+                        if category_signature:
+                            previous_category_openings.add(category_signature)
+
                     # Build cluster source label from primary tier + supporting sources
                     _supporting_sources = cluster.get("supporting_data", []) if not forced_primary else []
                     _raw_sources = (
@@ -772,6 +796,7 @@ if st.session_state.input_df is not None:
                         "primary_difficulty": final_primary_data.get("difficulty", ""),
                         "cluster_source": cluster_sources,
                         "scrape_status": scrape_status,
+                        "qa_flags": " | ".join(qa_flags) if qa_flags else "ok",
                         "status": "ok",
                         # Debug fields — not written to sheet
                         "_debug_tier": cluster_tier,
@@ -805,6 +830,7 @@ if st.session_state.input_df is not None:
                         "primary_difficulty": "",
                         "cluster_source": "",
                         "scrape_status": scrape_status,
+                        "qa_flags": "not run",
                         "status": f"error: {e}"
                     })
                     _show_partial(results)
@@ -830,7 +856,7 @@ if st.session_state.results_df is not None:
 
     # Summary table — clean output columns only, no debug fields
     display_cols = ["url", "primary_keyword", "runner_up", "primary_volume", "primary_difficulty",
-                    "supporting_keywords", "word_count", "scrape_status", "intro_copy", "cluster_source", "status"]
+                    "supporting_keywords", "word_count", "qa_flags", "scrape_status", "intro_copy", "cluster_source", "status"]
     st.dataframe(results_df[display_cols], use_container_width=True)
 
     # Per-row debug expanders
@@ -872,6 +898,10 @@ if st.session_state.results_df is not None:
                 # Supporting keywords
                 if row.get("supporting_keywords"):
                     st.caption(f"**Supporting keywords sent to AI:** {row['supporting_keywords']}")
+
+                qa_flags = row.get("qa_flags", "")
+                if qa_flags and qa_flags != "ok":
+                    st.warning(f"QA flags: {qa_flags}")
 
                 # Scrape / page context
                 st.caption("**Page Scraping**")
@@ -932,6 +962,7 @@ if st.session_state.results_df is not None:
                             "primary_difficulty": "Primary KW Difficulty",
                             "supporting_keywords": "Supporting Keywords",
                             "word_count": "Word Count",
+                            "qa_flags": "Intro QA Flags",
                             "scrape_status": "Page Scrape Status",
                             "cluster_source": "Cluster Source",
                             "status": "Intro Status"
