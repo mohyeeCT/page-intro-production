@@ -116,7 +116,8 @@ def score_keyword_pool(
             continue
 
         volume = row.get("volume", 0)
-        difficulty = row.get("difficulty", 50) or 50
+        raw_difficulty = row.get("difficulty")
+        difficulty = max(raw_difficulty if raw_difficulty is not None else 50, 1)
         impressions = row.get("impressions", 0)
         clicks = row.get("clicks", 0)
         ctr = row.get("ctr", 0)

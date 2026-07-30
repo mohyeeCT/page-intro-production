@@ -9,6 +9,7 @@ from utils.keyword import score_keyword_pool
 from utils.copy_gen import generate_intro, DEFAULT_MODELS
 from utils.intro_qa import build_intro_qa_flags, intro_opening_signature
 from utils.niches import get_niche_context, NICHES
+from utils.page_inputs import normalise_input_value, normalise_page_type
 from utils.scraper import scrape_page_context, is_ecommerce_collection_page
 
 st.set_page_config(page_title="Page Intro Production", layout="wide")
@@ -306,12 +307,16 @@ if st.session_state.input_df is not None:
                 sa_info = st.session_state.sa_info
                 _gsc = get_gsc_client(sa_info)
                 _df = st.session_state.input_df
-                _urls = _df[url_col].dropna().astype(str).tolist()[:10]
+                _urls = [
+                    normalise_input_value(value)
+                    for value in _df[url_col].tolist()
+                ]
+                _urls = [url for url in _urls if url.startswith("http")][:10]
 
                 _all_queries = {}
                 with st.spinner("Sampling GSC queries for brand detection..."):
                     for _u in _urls:
-                        _rows = get_top_queries_for_url(_gsc, gsc_site_url, _u.strip(), top_n=20)
+                        _rows = get_top_queries_for_url(_gsc, gsc_site_url, _u, top_n=20)
                         for _r in _rows:
                             _q = _r["query"].lower().strip()
                             if _q not in _all_queries:
@@ -456,16 +461,16 @@ if st.session_state.input_df is not None:
                     st.dataframe(_partial[_cols], use_container_width=True)
 
             for i, row in df.iterrows():
-                url = str(row[url_col]).strip()
-                h1 = str(row[h1_col]).strip() if h1_col in row else ""
-                page_type = str(row[page_type_col]).strip() if page_type_col != "(none)" and page_type_col in row else ""
-                manual_keywords_raw = str(row[keywords_col]).strip() if keywords_col != "(none)" and keywords_col in row else ""
+                url = normalise_input_value(row[url_col])
+                h1 = normalise_input_value(row[h1_col]) if h1_col in row else ""
+                page_type = normalise_page_type(row[page_type_col]) if page_type_col != "(none)" and page_type_col in row else ""
+                manual_keywords_raw = normalise_input_value(row[keywords_col]) if keywords_col != "(none)" and keywords_col in row else ""
                 manual_seeds = [k.strip() for k in manual_keywords_raw.split(",") if k.strip()] if manual_keywords_raw else []
 
                 pct = int((i / len(df)) * 100)
                 progress.progress(pct, text=f"Processing {i + 1}/{len(df)}: {url[:60]}")
 
-                if not url or url.lower() == "nan" or not url.startswith("http"):
+                if not url or not url.startswith("http"):
                     results.append({
                         "url": url,
                         "intro_copy": "",

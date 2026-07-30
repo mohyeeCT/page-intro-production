@@ -16,6 +16,49 @@ class FakeResponse:
 
 
 class IntroDfsTests(unittest.TestCase):
+    def test_volume_difficulty_preserves_zero_difficulty(self):
+        response = FakeResponse([
+            {
+                "keyword": "easy keyword",
+                "keyword_info": {"search_volume": 100},
+                "keyword_properties": {"keyword_difficulty": 0},
+            }
+        ])
+
+        with patch("utils.dfs._post_json", return_value=response):
+            result = dfs.get_keyword_volume_difficulty(
+                "login",
+                "password",
+                ["easy keyword"],
+            )
+
+        self.assertEqual(result["easy keyword"]["difficulty"], 0)
+
+    def test_ranked_keywords_preserve_zero_difficulty(self):
+        response = FakeResponse([
+            {
+                "keyword_data": {
+                    "keyword": "easy keyword",
+                    "keyword_info": {"search_volume": 100},
+                    "keyword_properties": {"keyword_difficulty": 0},
+                },
+                "ranked_serp_element": {
+                    "serp_item": {
+                        "rank_absolute": 5,
+                    }
+                },
+            }
+        ])
+
+        with patch("utils.dfs._post_json", return_value=response):
+            result = dfs.get_ranked_keywords_for_url(
+                "login",
+                "password",
+                "https://example.com/easy",
+            )
+
+        self.assertEqual(result[0]["difficulty"], 0)
+
     def test_ranked_keywords_tries_trailing_slash_variant_when_first_empty(self):
         calls = []
 
