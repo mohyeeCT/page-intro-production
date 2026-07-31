@@ -1,5 +1,7 @@
 import re
 
+from utils.language import find_non_us_english_spellings
+
 
 _STOPWORDS = {
     "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
@@ -115,6 +117,7 @@ def build_intro_qa_flags(
     previous_category_openings: set[str] | None = None,
     forbidden_phrases: str | list[str] = "",
     target_word_count: int | None = None,
+    protected_phrases: list[str] | None = None,
 ) -> list[str]:
     flags = []
     template = (page_template or "").strip().lower()
@@ -138,6 +141,17 @@ def build_intro_qa_flags(
     for phrase in _forbidden_phrase_list(forbidden_phrases):
         if _phrase_occurrences(intro_copy, phrase):
             flags.append(f'forbidden phrase used: "{phrase}"')
+
+    non_us_spellings = find_non_us_english_spellings(
+        intro_copy,
+        protected_phrases or [],
+    )
+    if non_us_spellings:
+        flags.append(
+            "Non-U.S. English spelling detected: "
+            + ", ".join(non_us_spellings[:5])
+            + ". Use U.S. English."
+        )
 
     if target_word_count:
         target = max(int(target_word_count), 1)

@@ -4,6 +4,33 @@ from utils.intro_qa import build_intro_qa_flags, intro_opening_signature
 
 
 class IntroQaTests(unittest.TestCase):
+    def test_non_us_spelling_is_flagged_but_official_names_are_protected(self):
+        flags = build_intro_qa_flags(
+            intro_copy=(
+                "The organisation prioritises clear guidance for teams comparing "
+                "service options and practical next steps."
+            ),
+            page_template="service_lp",
+        )
+        protected_flags = build_intro_qa_flags(
+            intro_copy=(
+                "Colour Centre helps teams compare practical service options and "
+                "implementation needs."
+            ),
+            page_template="service_lp",
+            protected_phrases=["Colour Centre"],
+        )
+
+        self.assertTrue(
+            any(flag.startswith("Non-U.S. English spelling detected:") for flag in flags)
+        )
+        self.assertFalse(
+            any(
+                flag.startswith("Non-U.S. English spelling detected:")
+                for flag in protected_flags
+            )
+        )
+
     def test_missing_primary_keyword_is_flagged(self):
         flags = build_intro_qa_flags(
             intro_copy="Find practical footwear for daily training, weekend miles, and recovery walks.",
