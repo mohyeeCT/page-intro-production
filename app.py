@@ -819,6 +819,7 @@ if st.session_state.input_df is not None:
                         previous_category_openings=previous_category_openings,
                         forbidden_phrases=_forbidden_str,
                         target_word_count=int(word_count),
+                        protected_phrases=[brand_name, h1],
                     )
 
                     opening_signature = intro_opening_signature(intro)

@@ -4,6 +4,25 @@ from utils import copy_gen
 
 
 class IntroCopyPromptTests(unittest.TestCase):
+    def test_prompt_requires_us_english(self):
+        prompt = copy_gen._build_prompt(
+            h1="Running Shoes",
+            primary_keyword="running shoes",
+            supporting_keywords=["trail shoes"],
+            business_type="ecommerce",
+            page_template="category",
+            brand_name="Acme",
+            include_brand=True,
+            word_count=80,
+            paragraph_count=1,
+            page_type="Category",
+            page_context="A UK source uses colour and prioritise.",
+        )
+
+        self.assertIn("U.S. ENGLISH REQUIREMENT", prompt)
+        self.assertIn("Do not imitate British spelling", prompt)
+        self.assertIn("Preserve official brand and product names", prompt)
+
     def test_provider_default_models_match_current_recommended_defaults(self):
         self.assertEqual(
             copy_gen.DEFAULT_MODELS,

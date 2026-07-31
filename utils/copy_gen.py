@@ -1,6 +1,8 @@
 import re
 import time
 
+from utils.language import US_ENGLISH_OUTPUT_RULE
+
 
 # Business type context injected into every prompt
 BUSINESS_TYPE_CONTEXT = {
@@ -40,7 +42,7 @@ PAGE_TEMPLATE_CONTEXT = {
         "PAGE TEMPLATE: Ecommerce Category\n"
         "Reader mindset: early-stage browsing, not yet ready to buy. They want orientation, not a sales pitch.\n"
         "Rules:\n"
-        "- Open by drawing the reader into the range naturally. Lead with a benefit, a use case, or the type of products available. Do not open with 'This collection is', 'This category is', or any variant of that pattern. Vary your opening — do not default to the same word or phrase every time; the right opening depends on what the page content emphasises.\n"
+        "- Open by drawing the reader into the range naturally. Lead with a benefit, a use case, or the type of products available. Do not open with 'This collection is', 'This category is', or any variant of that pattern. Vary your opening — do not default to the same word or phrase every time; the right opening depends on what the page content emphasizes.\n"
         "- Write about the range and who it is for. Do not focus on a single product.\n"
         "- Reference product types, materials, use cases, or brands from the page content if available.\n"
         "- Breadth over depth. The reader is exploring options, not comparing specs.\n"
@@ -89,7 +91,7 @@ PAGE_TEMPLATE_CONTEXT = {
         "- Informational tone throughout. No conversion language, no service promotion whatsoever.\n"
         "- No CTA of any kind in the intro.\n"
         "- If placing the primary keyword in the first sentence disrupts the hook, place it in the second sentence instead.\n"
-        "- Do not summarise what the article covers. Draw the reader into the topic."
+        "- Do not summarize what the article covers. Draw the reader into the topic."
     ),
     "brand": (
         "PAGE TEMPLATE: Brand / About Page\n"
@@ -229,6 +231,8 @@ PAGE TEMPLATE RULES
 
 {UNSUPPORTED_CLAIM_GUARDRAIL}
 {SCRAPED_CONTEXT_GUARDRAIL if scraped_block else ""}
+
+{US_ENGLISH_OUTPUT_RULE}
 
 UNIVERSAL COPY RULES
 - {para_instruction}
