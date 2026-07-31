@@ -1,6 +1,9 @@
 import re
 
-from utils.language import find_non_us_english_spellings
+from utils.language import (
+    find_internal_source_language,
+    find_non_us_english_spellings,
+)
 
 
 _STOPWORDS = {
@@ -151,6 +154,17 @@ def build_intro_qa_flags(
             "Non-U.S. English spelling detected: "
             + ", ".join(non_us_spellings[:5])
             + ". Use U.S. English."
+        )
+
+    internal_source_language = find_internal_source_language(
+        intro_copy,
+        protected_phrases or [],
+    )
+    if internal_source_language:
+        flags.append(
+            "Internal source language detected: "
+            + ", ".join(internal_source_language[:5])
+            + ". Rewrite as customer-facing copy."
         )
 
     if target_word_count:

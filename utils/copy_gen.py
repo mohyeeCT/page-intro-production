@@ -1,7 +1,7 @@
 import re
 import time
 
-from utils.language import US_ENGLISH_OUTPUT_RULE
+from utils.language import CUSTOMER_FACING_OUTPUT_RULE, US_ENGLISH_OUTPUT_RULE
 
 
 # Business type context injected into every prompt
@@ -233,6 +233,7 @@ PAGE TEMPLATE RULES
 {SCRAPED_CONTEXT_GUARDRAIL if scraped_block else ""}
 
 {US_ENGLISH_OUTPUT_RULE}
+{CUSTOMER_FACING_OUTPUT_RULE}
 
 UNIVERSAL COPY RULES
 - {para_instruction}

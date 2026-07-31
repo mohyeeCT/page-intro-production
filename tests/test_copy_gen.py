@@ -4,6 +4,30 @@ from utils import copy_gen
 
 
 class IntroCopyPromptTests(unittest.TestCase):
+    def test_prompt_blocks_internal_source_language(self):
+        prompt = copy_gen._build_prompt(
+            h1="Running Shoes",
+            primary_keyword="running shoes",
+            supporting_keywords=["trail shoes"],
+            business_type="ecommerce",
+            page_template="product",
+            brand_name="Acme",
+            include_brand=True,
+            word_count=80,
+            paragraph_count=1,
+            page_type="Product",
+            page_context="The live product page specifically positions the shoe for trails.",
+        )
+
+        self.assertIn("CUSTOMER-FACING SOURCE LANGUAGE RULE", prompt)
+        self.assertIn("Use page content, search results, keywords, and brand guidance silently", prompt)
+        self.assertIn("the live product page states", prompt)
+        self.assertIn("State supported details directly and naturally", prompt)
+        self.assertIn(
+            "Internal-source terms are allowed when they are genuinely part of the topic",
+            prompt,
+        )
+
     def test_prompt_requires_us_english(self):
         prompt = copy_gen._build_prompt(
             h1="Running Shoes",

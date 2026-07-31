@@ -11,7 +11,10 @@ class AppRunInfoTests(unittest.TestCase):
 
         self.assertIn("forbidden_phrases=_forbidden_str", source)
         self.assertIn("target_word_count=int(word_count)", source)
-        self.assertIn("protected_phrases=[brand_name, h1]", source)
+        self.assertIn(
+            "protected_phrases=[brand_name, h1, final_primary]",
+            source,
+        )
 
     def test_app_displays_run_preview_and_persists_run_metadata(self):
         source = APP_SOURCE.read_text(encoding="utf-8")

@@ -4,6 +4,20 @@ from utils.intro_qa import build_intro_qa_flags, intro_opening_signature
 
 
 class IntroQaTests(unittest.TestCase):
+    def test_internal_source_language_is_flagged(self):
+        flags = build_intro_qa_flags(
+            intro_copy=(
+                "The live product page specifically positions these running shoes "
+                "for mixed road and trail use."
+            ),
+            page_template="product",
+            primary_keyword="running shoes",
+        )
+
+        self.assertTrue(
+            any(flag.startswith("Internal source language detected:") for flag in flags)
+        )
+
     def test_non_us_spelling_is_flagged_but_official_names_are_protected(self):
         flags = build_intro_qa_flags(
             intro_copy=(
