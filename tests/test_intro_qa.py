@@ -4,6 +4,75 @@ from utils.intro_qa import build_intro_qa_flags, intro_opening_signature
 
 
 class IntroQaTests(unittest.TestCase):
+    def test_missing_primary_keyword_is_flagged(self):
+        flags = build_intro_qa_flags(
+            intro_copy="Find practical footwear for daily training, weekend miles, and recovery walks.",
+            page_template="category",
+            primary_keyword="running shoes",
+        )
+
+        self.assertIn("primary keyword missing", flags)
+
+    def test_primary_keyword_used_more_than_twice_is_flagged(self):
+        flags = build_intro_qa_flags(
+            intro_copy=(
+                "Running shoes support daily miles. These running shoes balance comfort "
+                "and grip, while our running shoes range covers road and trail needs."
+            ),
+            page_template="category",
+            primary_keyword="running shoes",
+        )
+
+        self.assertIn("primary keyword used more than twice", flags)
+
+    def test_verbatim_h1_repetition_is_flagged_unless_h1_is_the_primary_keyword(self):
+        repeated_flags = build_intro_qa_flags(
+            intro_copy="Summer Running Shoes bring breathable comfort to warm-weather training.",
+            page_template="category",
+            primary_keyword="breathable running shoes",
+            h1="Summer Running Shoes",
+        )
+        primary_h1_flags = build_intro_qa_flags(
+            intro_copy="Summer Running Shoes bring breathable comfort to warm-weather training.",
+            page_template="category",
+            primary_keyword="Summer Running Shoes",
+            h1="Summer Running Shoes",
+        )
+
+        self.assertIn("H1 repeated verbatim", repeated_flags)
+        self.assertNotIn("H1 repeated verbatim", primary_h1_flags)
+
+    def test_configured_forbidden_phrase_is_flagged_case_insensitively(self):
+        flags = build_intro_qa_flags(
+            intro_copy="Explore a Best in Class range designed for practical everyday use.",
+            page_template="category",
+            forbidden_phrases="best in class\nworld-class",
+        )
+
+        self.assertIn('forbidden phrase used: "best in class"', flags)
+
+    def test_word_count_outside_twenty_percent_target_range_is_flagged(self):
+        short_flags = build_intro_qa_flags(
+            intro_copy=" ".join(["word"] * 79),
+            page_template="service_lp",
+            target_word_count=100,
+        )
+        long_flags = build_intro_qa_flags(
+            intro_copy=" ".join(["word"] * 121),
+            page_template="service_lp",
+            target_word_count=100,
+        )
+        within_range_flags = build_intro_qa_flags(
+            intro_copy=" ".join(["word"] * 80),
+            page_template="service_lp",
+            target_word_count=100,
+        )
+
+        self.assertIn("intro shorter than recommended range", short_flags)
+        self.assertIn("intro longer than recommended range", long_flags)
+        self.assertNotIn("intro shorter than recommended range", within_range_flags)
+        self.assertNotIn("intro longer than recommended range", within_range_flags)
+
     def test_repeated_intro_opening_is_flagged_across_rows(self):
         prior = {
             intro_opening_signature(

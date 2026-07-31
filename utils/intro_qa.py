@@ -81,6 +81,23 @@ def _contains_sales_cta(intro_copy: str) -> bool:
     return any(phrase in normalised for phrase in _BLOG_CTA_PHRASES)
 
 
+def _phrase_occurrences(text: str, phrase: str) -> int:
+    normalised_text = " ".join(_normalise_words(text))
+    normalised_phrase = " ".join(_normalise_words(phrase))
+    if not normalised_phrase:
+        return 0
+    pattern = rf"(?:^| ){re.escape(normalised_phrase)}(?: |$)"
+    return len(re.findall(pattern, normalised_text))
+
+
+def _forbidden_phrase_list(forbidden_phrases: str | list[str]) -> list[str]:
+    if isinstance(forbidden_phrases, str):
+        candidates = forbidden_phrases.splitlines()
+    else:
+        candidates = forbidden_phrases or []
+    return list(dict.fromkeys(p.strip() for p in candidates if p and p.strip()))
+
+
 def _shares_opening_prefix(signature: str, previous_signatures: set[str], words: int = 3) -> bool:
     prefix = " ".join(signature.split()[:words])
     if not prefix:
@@ -96,10 +113,40 @@ def build_intro_qa_flags(
     page_type: str = "",
     previous_openings: set[str] | None = None,
     previous_category_openings: set[str] | None = None,
+    forbidden_phrases: str | list[str] = "",
+    target_word_count: int | None = None,
 ) -> list[str]:
     flags = []
     template = (page_template or "").strip().lower()
     intro_words = _normalise_words(intro_copy)
+
+    primary_mentions = _phrase_occurrences(intro_copy, primary_keyword)
+    if primary_keyword and primary_mentions == 0:
+        flags.append("primary keyword missing")
+    elif primary_mentions > 2:
+        flags.append("primary keyword used more than twice")
+
+    normalised_h1 = " ".join(_normalise_words(h1))
+    normalised_primary = " ".join(_normalise_words(primary_keyword))
+    if (
+        normalised_h1
+        and normalised_h1 != normalised_primary
+        and _phrase_occurrences(intro_copy, h1)
+    ):
+        flags.append("H1 repeated verbatim")
+
+    for phrase in _forbidden_phrase_list(forbidden_phrases):
+        if _phrase_occurrences(intro_copy, phrase):
+            flags.append(f'forbidden phrase used: "{phrase}"')
+
+    if target_word_count:
+        target = max(int(target_word_count), 1)
+        lower_bound = int(target * 0.8)
+        upper_bound = int(target * 1.2)
+        if len(intro_words) < lower_bound:
+            flags.append("intro shorter than recommended range")
+        elif len(intro_words) > upper_bound:
+            flags.append("intro longer than recommended range")
 
     opening = intro_opening_signature(intro_copy)
     if opening and opening in (previous_openings or set()):

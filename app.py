@@ -10,6 +10,7 @@ from utils.copy_gen import generate_intro, DEFAULT_MODELS
 from utils.intro_qa import build_intro_qa_flags, intro_opening_signature
 from utils.niches import get_niche_context, NICHES
 from utils.page_inputs import normalise_input_value, normalise_page_type
+from utils.run_info import build_run_metadata, estimate_intro_run
 from utils.scraper import scrape_page_context, is_ecommerce_collection_page
 
 st.set_page_config(page_title="Page Intro Production", layout="wide")
@@ -387,6 +388,53 @@ if st.session_state.input_df is not None:
 
     # ── Section 4: Run ──────────────────────────────────────────────────────
     st.header("4. Run")
+    _preview_valid_rows = 0
+    _preview_manual_rows = 0
+    _preview_h1_rows = 0
+    _preview_manual_seed_count = 0
+    for _, _preview_row in st.session_state.input_df.iterrows():
+        _preview_url = normalise_input_value(_preview_row[url_col])
+        if not _preview_url.startswith("http"):
+            continue
+        _preview_valid_rows += 1
+        _preview_manual = (
+            normalise_input_value(_preview_row[keywords_col])
+            if keywords_col != "(none)"
+            else ""
+        )
+        _preview_h1 = normalise_input_value(_preview_row[h1_col])
+        if _preview_manual:
+            _preview_manual_rows += 1
+            _preview_manual_seed_count += len(
+                [seed for seed in _preview_manual.split(",") if seed.strip()]
+            )
+        elif _preview_h1:
+            _preview_h1_rows += 1
+
+    _run_estimate = estimate_intro_run(
+        valid_rows=_preview_valid_rows,
+        manual_keyword_rows=_preview_manual_rows,
+        h1_fallback_rows=_preview_h1_rows,
+        manual_seed_count=_preview_manual_seed_count,
+    )
+    st.subheader("Run Preview")
+    _rp1, _rp2, _rp3, _rp4 = st.columns(4)
+    _rp1.metric("Rows to process", _run_estimate["rows"])
+    _rp2.metric("AI calls (up to)", _run_estimate["ai_calls"])
+    _rp3.metric(
+        "DFS requests",
+        f"{_run_estimate['dfs_calls_min']}-{_run_estimate['dfs_calls_max']}",
+    )
+    _rp4.metric(
+        "Estimated DFS cost",
+        f"${_run_estimate['dfs_cost_min']:.3f}-${_run_estimate['dfs_cost_max']:.3f}",
+    )
+    st.caption(
+        "Approximate DataForSEO range based on current public list pricing and the "
+        "app's URL-variant/enrichment paths. Intro sends one page per AI call. "
+        "AI token charges are not included because prompt and output tokens vary by page."
+    )
+
     _missing = []
     if not api_key:
         _missing.append(f"{provider} API key")
@@ -418,6 +466,15 @@ if st.session_state.input_df is not None:
             except Exception as e:
                 st.error(f"GSC client init failed: {e}")
                 st.stop()
+
+            selected_model = (
+                st.session_state.get("selected_model")
+                or DEFAULT_MODELS.get(provider, "")
+            )
+            run_metadata = build_run_metadata(
+                provider=provider,
+                model=selected_model,
+            )
 
             # Build branded terms filter list: auto-detected + manual sidebar + brand name words
             branded_terms = []
@@ -746,7 +803,7 @@ if st.session_state.input_df is not None:
                         provider=provider,
                         api_key=api_key,
                         page_context=page_context,
-                        model=st.session_state.get("selected_model"),
+                        model=selected_model,
                         brand_guidelines=_effective_guidelines,
                         forbidden_phrases=_forbidden_str,
                     )
@@ -760,6 +817,8 @@ if st.session_state.input_df is not None:
                         page_type=page_type,
                         previous_openings=previous_openings,
                         previous_category_openings=previous_category_openings,
+                        forbidden_phrases=_forbidden_str,
+                        target_word_count=int(word_count),
                     )
 
                     opening_signature = intro_opening_signature(intro)
@@ -843,7 +902,10 @@ if st.session_state.input_df is not None:
             progress.progress(100, text="Done.")
             status_area.empty()
             partial_placeholder.empty()
-            st.session_state.results_df = pd.DataFrame(results)
+            results_df = pd.DataFrame(results)
+            for metadata_column, metadata_value in run_metadata.items():
+                results_df[metadata_column] = metadata_value
+            st.session_state.results_df = results_df
 
 # ── Results (outside run block so buttons survive reruns) ───────────────────
 if st.session_state.results_df is not None:
@@ -860,8 +922,9 @@ if st.session_state.results_df is not None:
     col_c.metric("Avg Word Count", int(ok["word_count"].mean()) if len(ok) > 0 else 0)
 
     # Summary table — clean output columns only, no debug fields
-    display_cols = ["url", "primary_keyword", "runner_up", "primary_volume", "primary_difficulty",
-                    "supporting_keywords", "word_count", "qa_flags", "scrape_status", "intro_copy", "cluster_source", "status"]
+    display_cols = ["url", "run_id", "generated_at", "provider", "model", "primary_keyword",
+                    "runner_up", "primary_volume", "primary_difficulty", "supporting_keywords",
+                    "word_count", "qa_flags", "scrape_status", "intro_copy", "cluster_source", "status"]
     st.dataframe(results_df[display_cols], use_container_width=True)
 
     # Per-row debug expanders
@@ -970,6 +1033,10 @@ if st.session_state.results_df is not None:
                             "qa_flags": "Intro QA Flags",
                             "scrape_status": "Page Scrape Status",
                             "cluster_source": "Cluster Source",
+                            "run_id": "Run ID",
+                            "generated_at": "Generated At",
+                            "provider": "Provider",
+                            "model": "Model",
                             "status": "Intro Status"
                         }
                     )
